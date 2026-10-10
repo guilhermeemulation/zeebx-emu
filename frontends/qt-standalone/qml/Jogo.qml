@@ -85,11 +85,9 @@ Window {
         anchors.bottomMargin: 24 + (painel.visible ? painel.height : 0)
         focus: true
 
-        // Esc fecha e P pausa, como na janela do egui. Nenhuma das duas colide com o controle do
-        // Zeebo, que usa setas, Z, X, C, V, Q, W, F, G, H, Backspace e Enter. F11 e Alt+Enter
-        // alternam a tela cheia. O screenshot (F9 por padrão, trocável) é perguntado antes do
-        // jogo: um botão mapeado na mesma tecla não a recebe. Ver
-        // `docs/implementacao/22-screenshots.md`.
+        // Esc fecha, P pausa, F5 salva e F8 carrega o estado. F11 e Alt+Enter alternam tela cheia.
+        // O screenshot (F9 por padrão, trocável) continua sendo tratado antes do jogo.
+        // Save states usam o formato validado pelo núcleo e ficam em %APPDATA%/Zeebx/states no Windows.
         Keys.onPressed: (evento) => {
             if (tela.ehAtalhoDeScreenshot(evento.key)) {
                 // Segurar a tecla tira um screenshot, e não trinta.
@@ -99,6 +97,10 @@ Window {
                 janela.close()
             } else if (evento.key === Qt.Key_P && !evento.isAutoRepeat) {
                 pausado.visible = tela.pausa()
+            } else if (evento.key === Qt.Key_F5 && !evento.isAutoRepeat) {
+                tela.salvaEstado()
+            } else if (evento.key === Qt.Key_F8 && !evento.isAutoRepeat) {
+                tela.carregaEstado()
             } else if (evento.key === Qt.Key_F11
                        || (evento.key === Qt.Key_Return && (evento.modifiers & Qt.AltModifier))) {
                 janela.alternaTelaCheia()
@@ -223,6 +225,44 @@ Window {
             function onScreenshotSerieChanged() {
                 avisoDoScreenshot.visible = true
                 someODoScreenshot.restart()
+            }
+        }
+    }
+
+    // Resultado do save state: o aviso fica fora do quadro e some após alguns segundos.
+    Rectangle {
+        id: avisoDoEstado
+
+        anchors.left: tela.left
+        anchors.top: tela.top
+        anchors.margins: 16
+        width: textoDoEstado.implicitWidth + 24
+        height: textoDoEstado.implicitHeight + 16
+        visible: false
+        radius: 6
+        color: "#e6202020"
+        border.color: "#505050"
+
+        Text {
+            id: textoDoEstado
+            anchors.centerIn: parent
+            width: Math.min(implicitWidth, janela.width - 64)
+            wrapMode: Text.Wrap
+            color: tela.saveStateFailed ? "#ffb040" : "white"
+            text: tela.saveStateText
+        }
+
+        Timer {
+            id: someDoEstado
+            interval: 3500
+            onTriggered: avisoDoEstado.visible = false
+        }
+
+        Connections {
+            target: tela
+            function onSaveStateSerialChanged() {
+                avisoDoEstado.visible = true
+                someDoEstado.restart()
             }
         }
     }
