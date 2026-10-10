@@ -197,9 +197,10 @@ fn format_com(fmt: &str, args: &mut impl ArgSource, largo: bool) -> String {
                 let value = args.next_word();
                 out.push_str(&f.pad(char::from_u32(value).unwrap_or('?').to_string()));
             }
-            Some('s') => {
+            Some('s') | Some('S') => {
+                let conversion = spec.chars().last().unwrap_or('s');
                 let addr = args.next_word();
-                let mut text = match largo {
+                let mut text = match largo || conversion == 'S' {
                     true => args.read_wide_string(addr),
                     false => args.read_cstring(addr),
                 };
@@ -311,6 +312,12 @@ mod tests {
         assert_eq!(format("[%*d]", &mut args), "[    42]");
         let mut args = fake(&[0x200], &[(0x200, "abcdef")]);
         assert_eq!(format("[%.3s]", &mut args), "[abc]");
+    }
+
+    #[test]
+    fn maiusculo_s_le_string_aechar_no_formatador_normal() {
+        let mut args = fake(&[0x100], &[(0x100, "Nome do carro")]);
+        assert_eq!(format("Carro: %S", &mut args), "Carro: L:Nome do carro");
     }
 
     #[test]
