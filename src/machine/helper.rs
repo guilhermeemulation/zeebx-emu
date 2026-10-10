@@ -794,40 +794,45 @@ impl<C: CpuBackend> Machine<C> {
             //
             // Na AAPCS o `va_list` é um ponteiro para a área de argumentos, então basta ler
             // palavras em sequência a partir dele.
-            "vsnprintf" | "vsprintf" => {
-                let (fmt_addr, args_addr, limit) = if name == "vsnprintf" {
-                    (a2, self.cpu.read_reg(Reg::R3), a1 as usize)
-                } else {
-                    (a1, a2, usize::MAX)
-                };
-                let fmt = self.cpu.read_cstring(fmt_addr, MAX_STRING);
-                // `AEEOldVaList` é `int **` no ARM (`inc/AEEOldVaList.h`): o que chega é o
-                // endereço da variável `va_list`, não a área de argumentos. Sem essa
-                // indireção o primeiro `%d` imprime o próprio ponteiro da pilha — foi o que
-                // transformou `inva1_shotgun` em `inva537919380_shotgun` no Quake.
+            "vsnprintf" => {
+                let fmt = self.cpu.read_cstring(a2, MAX_STRING);
                 let mut source = GuestArgs {
                     words: Vec::new(),
                     index: 0,
-                    stack: self.cpu.read_u32(args_addr)?,
+                    stack: self.cpu.read_u32(self.cpu.read_reg(Reg::R3))?,
                     cpu: &self.cpu,
                 };
                 let text = cformat::format(&fmt, &mut source);
-                self.write_cstring_limited(a0, &text, limit)?;
+                self.write_cstring_limited(a0, &text, a1 as usize)?;
+                // Mantém o comportamento atual do vsnprintf até haver evidência específica do BREW.
                 text.len() as u32
+            }
+            "vsprintf" => {
+                let fmt = self.cpu.read_cstring(a1, MAX_STRING);
+                let mut source = GuestArgs {
+                    words: Vec::new(),
+                    index: 0,
+                    stack: self.cpu.read_u32(a2)?,
+                    cpu: &self.cpu,
+                };
+                let text = cformat::format(&fmt, &mut source);
+                self.write_cstring(a0, &text)?;
+                crate::cpu::latin1_encode(&text).len() as u32
             }
             // int snprintf(char *dst, int nSize, const char *fmt, ...)
             "snprintf" => {
                 let fmt = self.cpu.read_cstring(a2, MAX_STRING);
                 let text = self.format_from(3, &fmt);
                 self.write_cstring_limited(a0, &text, a1 as usize)?;
-                text.len() as u32
+                // O BREW inclui o NUL no tamanho retornado; também vale para dst == NULL.
+                crate::cpu::latin1_encode(&text).len() as u32 + 1
             }
             // `sprintf(char *dst, const char *fmt, ...)`: os variádicos começam em `r2`.
             "sprintf" => {
                 let fmt = self.cpu.read_cstring(a1, MAX_STRING);
                 let text = self.format_from(2, &fmt);
                 self.write_cstring(a0, &text)?;
-                text.len() as u32
+                crate::cpu::latin1_encode(&text).len() as u32
             }
             "dbgprintf" => {
                 let fmt = self.cpu.read_cstring(a0, MAX_STRING);
