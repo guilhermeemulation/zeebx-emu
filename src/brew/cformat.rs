@@ -197,8 +197,7 @@ fn format_com(fmt: &str, args: &mut impl ArgSource, largo: bool) -> String {
                 let value = args.next_word();
                 out.push_str(&f.pad(char::from_u32(value).unwrap_or('?').to_string()));
             }
-            Some('s') | Some('S') => {
-                let conversion = spec.chars().last().unwrap_or('s');
+            Some(conversion @ ('s' | 'S')) => {
                 let addr = args.next_word();
                 let mut text = match largo || conversion == 'S' {
                     true => args.read_wide_string(addr),
