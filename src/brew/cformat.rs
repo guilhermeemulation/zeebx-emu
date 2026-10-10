@@ -199,9 +199,11 @@ fn format_com(fmt: &str, args: &mut impl ArgSource, largo: bool) -> String {
             }
             Some(conversion @ ('s' | 'S')) => {
                 let addr = args.next_word();
-                let mut text = match largo || conversion == 'S' {
-                    true => args.read_wide_string(addr),
-                    false => args.read_cstring(addr),
+                // No printf do BREW, %S lê AECHAR (UTF-16); %s continua lendo char*.
+                let mut text = match (largo, conversion) {
+                    (true, _) | (false, 'S') => args.read_wide_string(addr),
+                    (false, 's') => args.read_cstring(addr),
+                    _ => unreachable!(),
                 };
                 // Na string a precisão é teto, não piso: ela corta.
                 if let Some(limit) = f.precision {
@@ -314,15 +316,15 @@ mod tests {
     }
 
     #[test]
-    fn maiusculo_s_le_string_aechar_no_formatador_normal() {
-        let mut args = fake(&[0x100], &[(0x100, "Nome do carro")]);
-        assert_eq!(format("Carro: %S", &mut args), "Carro: L:Nome do carro");
-    }
-
-    #[test]
     fn especificador_desconhecido_sobrevive_sem_consumir_argumento() {
         let mut args = fake(&[9], &[]);
         assert_eq!(format("%q %d", &mut args), "%q 9");
+    }
+
+    #[test]
+    fn maiusculo_s_le_string_aechar_no_printf_normal() {
+        let mut args = fake(&[0x100], &[(0x100, "Escavação")]);
+        assert_eq!(format("vença 3 corridas na região %S", &mut args), "vença 3 corridas na região L:Escavação");
     }
 
     #[test]
