@@ -495,7 +495,7 @@ impl<C: CpuBackend> Machine<C> {
                     units.truncate(a1 as usize);
                 }
                 let text = String::from_utf16_lossy(&units);
-                self.write_cstring_limited(a2, &text, self.cpu.read_reg(Reg::R3) as usize)?;
+                self.write_utf8_limited(a2, &text, self.cpu.read_reg(Reg::R3) as usize)?;
                 TRUE
             }
 
@@ -980,6 +980,39 @@ impl<C: CpuBackend> Machine<C> {
         units.truncate(max_units.saturating_sub(1));
         units.push(0);
         let bytes: Vec<u8> = units.iter().flat_map(|u| u.to_le_bytes()).collect();
+        self.cpu.write_mem(addr, &bytes)
+    }
+
+    /// Escreve texto em UTF-8 sem dividir caracteres.
+    ///
+    /// O terminador NUL só é escrito quando sobra espaço no destino.
+    pub(super) fn write_utf8_limited(
+        &mut self,
+        addr: u32,
+        text: &str,
+        max_bytes: usize,
+    ) -> Result<(), CpuError> {
+        if addr == 0 || max_bytes == 0 {
+            return Ok(());
+        }
+
+        let mut bytes = Vec::with_capacity(max_bytes.min(text.len().saturating_add(1)));
+
+        for ch in text.chars() {
+            let tamanho = ch.len_utf8();
+            if bytes.len() + tamanho > max_bytes {
+                break;
+            }
+
+            let mut buffer = [0u8; 4];
+            bytes.extend_from_slice(ch.encode_utf8(&mut buffer).as_bytes());
+        }
+
+        // O terminador só entra se houver um byte livre.
+        if bytes.len() < max_bytes {
+            bytes.push(0);
+        }
+
         self.cpu.write_mem(addr, &bytes)
     }
 
