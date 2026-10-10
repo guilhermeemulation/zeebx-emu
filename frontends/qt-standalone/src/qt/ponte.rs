@@ -56,6 +56,9 @@ pub mod qobject {
         #[qproperty(bool, screenshot_falhou, cxx_name = "screenshotFalhou")]
         #[qproperty(QString, screenshot_pasta, cxx_name = "screenshotPasta")]
         #[qproperty(i32, screenshot_serie, cxx_name = "screenshotSerie")]
+        #[qproperty(QString, save_state_text, cxx_name = "saveStateText")]
+        #[qproperty(bool, save_state_failed, cxx_name = "saveStateFailed")]
+        #[qproperty(i32, save_state_serial, cxx_name = "saveStateSerial")]
         type TelaDoJogo = super::TelaDoJogoRust;
 
         /// Uma volta: entrada, emulação e, se a tela mudou, um quadro novo.
@@ -78,6 +81,16 @@ pub mod qobject {
         #[qinvokable]
         #[cxx_name = "ehAtalhoDeScreenshot"]
         fn eh_atalho_de_screenshot(self: &Self, codigo: i32) -> bool;
+
+        /// Grava o slot único de save state (F5).
+        #[qinvokable]
+        #[cxx_name = "salvaEstado"]
+        fn salva_estado(self: Pin<&mut Self>);
+
+        /// Restaura o slot único de save state (F8).
+        #[qinvokable]
+        #[cxx_name = "carregaEstado"]
+        fn carrega_estado(self: Pin<&mut Self>);
 
         /// Grava o quadro que está na tela. `carimbo` é a hora local, pronta para o nome do
         /// arquivo. O aviso chega depois, pela `screenshotSerie`.
@@ -181,6 +194,9 @@ pub struct TelaDoJogoRust {
     screenshot_falhou: bool,
     screenshot_pasta: QString,
     screenshot_serie: i32,
+    save_state_text: QString,
+    save_state_failed: bool,
+    save_state_serial: i32,
     /// A tela que foi para o `ItemDoQuadro` como imagem: série e escritas. Igual, não há o que
     /// subir. `None` quando o que está lá é a textura da placa, ou nada.
     chave: Option<(u64, u64)>,
@@ -337,6 +353,40 @@ impl qobject::TelaDoJogo {
     pub fn screenshot(self: Pin<&mut Self>, carimbo: &QString) {
         let carimbo = String::from(carimbo);
         nucleo::com(|nucleo| nucleo.screenshot(&carimbo));
+    }
+
+    pub fn salva_estado(mut self: Pin<&mut Self>) {
+        let resultado = nucleo::com(|nucleo| nucleo.salva_estado());
+        let serie = self.save_state_serial().wrapping_add(1);
+        self.as_mut().set_save_state_serial(serie);
+        match resultado {
+            Ok(texto) => {
+                self.as_mut().set_save_state_text(QString::from(&texto));
+                self.as_mut().set_save_state_failed(false);
+            }
+            Err(erro) => {
+                self.as_mut().set_save_state_text(QString::from(&erro));
+                self.as_mut().set_save_state_failed(true);
+            }
+        }
+    }
+
+    pub fn carrega_estado(mut self: Pin<&mut Self>) {
+        let resultado = nucleo::com(|nucleo| nucleo.carrega_estado());
+        let serie = self.save_state_serial().wrapping_add(1);
+        self.as_mut().set_save_state_serial(serie);
+        match resultado {
+            Ok(texto) => {
+                self.as_mut().set_save_state_text(QString::from(&texto));
+                self.as_mut().set_save_state_failed(false);
+                self.as_mut().esvazia();
+                self.as_mut().rust_mut().chave = None;
+            }
+            Err(erro) => {
+                self.as_mut().set_save_state_text(QString::from(&erro));
+                self.as_mut().set_save_state_failed(true);
+            }
+        }
     }
 
     pub fn solta(self: Pin<&mut Self>) {
