@@ -648,6 +648,82 @@ impl Nucleo {
         Key::from_name(&self.settings.atalhos.screenshot) == Some(tecla)
     }
 
+    /// O arquivo do estado fica separado por título e pasta de conteúdo, para não misturar
+    /// revisões diferentes do mesmo jogo. O formato interno e a validação pertencem ao núcleo.
+    fn caminho_do_estado(&self) -> Result<PathBuf, String> {
+        let partida = self.partida.as_ref().ok_or_else(|| "Nenhum jogo está aberto".to_string())?;
+        let titulo = self.titulo().unwrap_or_else(|| library::sem_impressao_digital(partida.sessao().title()));
+        let id = partida.sessao().content_root().file_name()
+            .and_then(|nome| nome.to_str()).unwrap_or("conteudo");
+        let pasta = format!("{}-{}", screenshot::nome_seguro(&titulo), screenshot::nome_seguro(id));
+        Ok(zeebx::config::config_dir().join("states").join(pasta).join("slot-1.zbxstate"))
+    }
+
+    /// Grava o estado atual com publicação atômica: uma falha ao escrever não destrói o anterior.
+    pub fn salva_estado(&mut self) -> Result<String, String> {
+        const LIMITE: u64 = 128 * 1024 * 1024;
+        let caminho = self.caminho_do_estado()?;
+        let com_placa = self.gl.is_some();
+        let bytes = {
+            let partida = self.partida.as_mut().ok_or_else(|| "Nenhum jogo está aberto".to_string())?;
+            no_contexto(com_placa, || {
+                partida.sessao_mut().pode_salvar()?;
+                Ok::<Vec<u8>, String>(partida.sessao().grava_estado())
+            })?
+        };
+        if bytes.len() as u64 > LIMITE {
+            return Err("O estado excede o limite de 128 MiB".into());
+        }
+        let pasta = caminho.parent().ok_or_else(|| "Pasta do estado inválida".to_string())?;
+        std::fs::create_dir_all(pasta).map_err(|erro| format!("Não foi possível criar a pasta de estados: {erro}"))?;
+        let temporario = caminho.with_extension("zbxstate.tmp");
+        let backup = caminho.with_extension("zbxstate.bak");
+        let mut arquivo = std::fs::File::create(&temporario)
+            .map_err(|erro| format!("Não foi possível criar o estado temporário: {erro}"))?;
+        use std::io::Write;
+        if let Err(erro) = arquivo.write_all(&bytes).and_then(|_| arquivo.sync_all()) {
+            let _ = std::fs::remove_file(&temporario);
+            return Err(format!("Não foi possível gravar o estado: {erro}"));
+        }
+        drop(arquivo);
+        if caminho.exists() {
+            let _ = std::fs::remove_file(&backup);
+            std::fs::rename(&caminho, &backup)
+                .map_err(|erro| format!("Não foi possível proteger o estado anterior: {erro}"))?;
+        }
+        if let Err(erro) = std::fs::rename(&temporario, &caminho) {
+            if backup.exists() { let _ = std::fs::rename(&backup, &caminho); }
+            let _ = std::fs::remove_file(&temporario);
+            return Err(format!("Não foi possível concluir a gravação do estado: {erro}"));
+        }
+        let _ = std::fs::remove_file(&backup);
+        Ok(format!("Estado salvo em {}", caminho.display()))
+    }
+
+    /// Carrega o único slot de estado. O núcleo valida versão, integridade e compatibilidade.
+    pub fn carrega_estado(&mut self) -> Result<String, String> {
+        const LIMITE: u64 = 128 * 1024 * 1024;
+        let caminho = self.caminho_do_estado()?;
+        let tamanho = std::fs::metadata(&caminho)
+            .map_err(|erro| format!("Ainda não existe estado salvo para este jogo: {erro}"))?.len();
+        if tamanho == 0 || tamanho > LIMITE {
+            return Err("O arquivo de estado está vazio ou excede o limite de 128 MiB".into());
+        }
+        let bytes = std::fs::read(&caminho).map_err(|erro| format!("Não foi possível ler o estado: {erro}"))?;
+        let com_placa = self.gl.is_some();
+        let resultado = {
+            let partida = self.partida.as_mut().ok_or_else(|| "Nenhum jogo está aberto".to_string())?;
+            no_contexto(com_placa, || partida.sessao_mut().restaura_estado(&bytes))
+        };
+        resultado.map_err(|erro| format!("O núcleo recusou o estado: {erro:?}"))?;
+        self.teclas.clear();
+        if let Some(partida) = self.partida.as_mut() {
+            partida.esquece_entrada();
+            partida.reinicia_relogio();
+        }
+        Ok(format!("Estado carregado de {}", caminho.display()))
+    }
+
     /// Grava o quadro que está na tela. `carimbo` é a hora local, que vem do Qt.
     ///
     /// A leitura é aqui, com o contexto corrente, porque a textura só se lê nele; o PNG vai para
