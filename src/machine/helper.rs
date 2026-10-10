@@ -813,21 +813,29 @@ impl<C: CpuBackend> Machine<C> {
                 };
                 let text = cformat::format(&fmt, &mut source);
                 self.write_cstring_limited(a0, &text, limit)?;
-                text.len() as u32
+                if name == "vsprintf" {
+                    crate::cpu::latin1_encode(&text).len() as u32 + 1
+                } else {
+                    // O comportamento de vsnprintf permanece como estava até haver medição
+                    // que confirme a convenção esperada pelo jogo.
+                    text.len() as u32
+                }
             }
             // int snprintf(char *dst, int nSize, const char *fmt, ...)
             "snprintf" => {
                 let fmt = self.cpu.read_cstring(a2, MAX_STRING);
                 let text = self.format_from(3, &fmt);
                 self.write_cstring_limited(a0, &text, a1 as usize)?;
-                text.len() as u32
+                // A ABI BREW usada pelo jogo inclui o NUL no retorno. Se dst for nulo
+                // e nSize for zero, retorna o tamanho necessário, também incluindo o NUL.
+                crate::cpu::latin1_encode(&text).len() as u32 + 1
             }
             // `sprintf(char *dst, const char *fmt, ...)`: os variádicos começam em `r2`.
             "sprintf" => {
                 let fmt = self.cpu.read_cstring(a1, MAX_STRING);
                 let text = self.format_from(2, &fmt);
                 self.write_cstring(a0, &text)?;
-                text.len() as u32
+                crate::cpu::latin1_encode(&text).len() as u32 + 1
             }
             "dbgprintf" => {
                 let fmt = self.cpu.read_cstring(a0, MAX_STRING);
