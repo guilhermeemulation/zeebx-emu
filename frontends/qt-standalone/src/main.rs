@@ -28,12 +28,18 @@ fn preparar_modo_portatil() -> Result<(), String> {
     let config = portable.join("config");
     let dados = portable.join("data");
     let cache = portable.join("cache");
-    for dir in [&config, &dados, &cache] {
+    let cache_qml = cache.join("qml");
+    for dir in [&config, &dados, &cache, &cache_qml] {
         std::fs::create_dir_all(dir).map_err(|e| format!("não foi possível criar {}: {e}", dir.display()))?;
     }
 
     // Rust 2024 marca set_var como unsafe. Isto ocorre no início do main, antes de criar
-    // QGuiApplication ou iniciar threads, para que Qt/QStandardPaths usem as pastas portáteis.
+    // QGuiApplication ou iniciar threads.
+    //
+    // Além dos diretórios de usuário, indicamos caminhos explícitos para os caches do Qt:
+    // QML_DISK_CACHE_PATH controla o cache de QML; QSG_RHI_PIPELINE_CACHE_LOAD/SAVE
+    // direcionam o cache de pipelines gráficos, que pode ignorar XDG_CACHE_HOME no Windows.
+    let pipeline_cache = cache.join("zeebx-qt.qtpipelinecache");
     unsafe {
         std::env::set_var("APPDATA", &config);
         std::env::set_var("LOCALAPPDATA", &dados);
@@ -41,6 +47,9 @@ fn preparar_modo_portatil() -> Result<(), String> {
         std::env::set_var("XDG_DATA_HOME", &dados);
         std::env::set_var("XDG_CACHE_HOME", &cache);
         std::env::set_var("HOME", &portable);
+        std::env::set_var("QML_DISK_CACHE_PATH", &cache_qml);
+        std::env::set_var("QSG_RHI_PIPELINE_CACHE_LOAD", &pipeline_cache);
+        std::env::set_var("QSG_RHI_PIPELINE_CACHE_SAVE", &pipeline_cache);
     }
     eprintln!("Zeebx: modo portátil ativado em {}", portable.display());
     Ok(())
