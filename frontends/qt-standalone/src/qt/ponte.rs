@@ -85,6 +85,16 @@ pub mod qobject {
         #[qinvokable]
         fn screenshot(self: Pin<&mut Self>, carimbo: &QString);
 
+        /// Solicita salvar no próximo limite seguro de quadro, sem overlay.
+        #[qinvokable]
+        #[cxx_name = "salvaEstado"]
+        fn salva_estado(self: Pin<&mut Self>);
+
+        /// Solicita carregar no próximo limite seguro de quadro, sem overlay.
+        #[qinvokable]
+        #[cxx_name = "carregaEstado"]
+        fn carrega_estado(self: Pin<&mut Self>);
+
         /// Pausa ou retoma o jogo. Devolve se ficou pausado.
         #[qinvokable]
         fn pausa(self: Pin<&mut Self>) -> bool;
@@ -356,6 +366,14 @@ impl qobject::TelaDoJogo {
         self.as_mut().esvazia();
         self.as_mut().rust_mut().chave = None;
         self.as_mut().set_parou(QString::default());
+    }
+
+    pub fn salva_estado(self: Pin<&mut Self>) {
+        nucleo::com(|nucleo| nucleo.solicita_estado(true));
+    }
+
+    pub fn carrega_estado(self: Pin<&mut Self>) {
+        nucleo::com(|nucleo| nucleo.solicita_estado(false));
     }
 
     pub fn pausa(self: Pin<&mut Self>) -> bool {
