@@ -16,6 +16,11 @@ use std::sync::Arc;
 use std::sync::mpsc::{self, Receiver, Sender, TryRecvError};
 use std::time::Instant;
 
+use flate2::read::ZlibDecoder;
+use flate2::write::ZlibEncoder;
+use flate2::Compression;
+use std::io::{Read, Write};
+
 use zeebx::eframe::egui::Key;
 use zeebx::input;
 use zeebx::input::padview::PadArt;
@@ -175,6 +180,8 @@ pub struct Nucleo {
     teclas: HashSet<Key>,
     /// Por onde as threads de gravação dos screenshots respondem. Ver [`Nucleo::screenshot`].
     gravacoes: (Sender<Gravacao>, Receiver<Gravacao>),
+    /// Ação pendente de save state: `true` salva, `false` carrega.
+    estado_pendente: Option<bool>,
 }
 
 impl Nucleo {
@@ -222,6 +229,7 @@ impl Nucleo {
             calibracao: Calibracao::default(),
             teclas: HashSet::new(),
             gravacoes: mpsc::channel(),
+            estado_pendente: None,
         };
         nucleo.procura_de_novo();
         // Na abertura, a pergunta ao GitHub, como no egui: a resposta chega pelo relógio da
@@ -735,6 +743,66 @@ impl Nucleo {
         self.partida.as_ref().is_some_and(|partida| partida.pausada)
     }
 
+    /// Enfileira uma operação sem interromper a callback do teclado nem desenhar avisos.
+    pub fn solicita_estado(&mut self, salvar: bool) {
+        self.estado_pendente = Some(salvar);
+    }
+
+    /// Salva/carrega no limite entre quadros, com o contexto de GL do jogo corrente.
+    /// O arquivo usa uma assinatura própria seguida de zlib para compactar os dados.
+    fn processa_estado_pendente(&mut self) {
+        let Some(salvar) = self.estado_pendente.take() else {
+            return;
+        };
+        let com_placa = self.gl.is_some();
+        no_contexto(com_placa, || {
+            let Some(titulo) = self.titulo() else {
+                return;
+            };
+            let pasta = crate::config::config_dir().join("save_states");
+            let caminho = pasta.join(format!("{}.zstate", screenshot::nome_seguro(&titulo)));
+            let Some(partida) = self.partida.as_mut() else {
+                return;
+            };
+
+            let resultado: Result<(), String> = if salvar {
+                partida.sessao_mut().pode_salvar().map_err(|e| e.to_string()).and_then(|()| {
+                    let bytes = partida.sessao().grava_estado();
+                    let mut encoder = ZlibEncoder::new(Vec::new(), Compression::default());
+                    encoder.write_all(&bytes).map_err(|e| e.to_string())?;
+                    let compactado = encoder.finish().map_err(|e| e.to_string())?;
+                    let mut arquivo = b"ZBZC\x01".to_vec();
+                    arquivo.extend_from_slice(&compactado);
+                    std::fs::create_dir_all(&pasta).map_err(|e| e.to_string())?;
+                    let temporario = caminho.with_extension(format!("zstate.{}.tmp", std::process::id()));
+                    std::fs::write(&temporario, arquivo).map_err(|e| e.to_string())?;
+                    if caminho.exists() {
+                        std::fs::remove_file(&caminho).map_err(|e| e.to_string())?;
+                    }
+                    std::fs::rename(&temporario, &caminho).map_err(|e| e.to_string())?;
+                    Ok(())
+                })
+            } else {
+                (|| {
+                    let arquivo = std::fs::read(&caminho).map_err(|e| e.to_string())?;
+                    if !arquivo.starts_with(b"ZBZC\x01") {
+                        return Err("o arquivo não é um save state compactado do Zeebx".to_string());
+                    }
+                    let mut decoder = ZlibDecoder::new(&arquivo[5..]);
+                    let mut bytes = Vec::new();
+                    decoder.read_to_end(&mut bytes).map_err(|e| e.to_string())?;
+                    partida.sessao_mut().restaura_estado(&bytes).map_err(|e| e.to_string())?;
+                    partida.esquece_entrada();
+                    Ok(())
+                })()
+            };
+            if let Err(erro) = resultado {
+                // Sem mensagens por cima do jogo; os detalhes ficam disponíveis no log.
+                eprintln!("Zeebx: {} save state de {}: {erro}", if salvar { "não salvou" } else { "não carregou" }, titulo);
+            }
+        });
+    }
+
     /// Uma tecla da janela do jogo. Cada evento vai à partida na hora: ver
     /// [`Partida::teclado_mudou`].
     pub fn tecla(&mut self, tecla: Key, apertada: bool) {
@@ -812,6 +880,8 @@ impl Nucleo {
     ///
     /// `area` é o tamanho da tela do jogo na janela, para a proporção "da janela".
     pub fn passo(&mut self, area: [f32; 2]) -> Volta {
+        // O save state só toca na sessão entre voltas, com o contexto GL dela corrente.
+        self.processa_estado_pendente();
         // Antes de tudo: o aviso tem de sair também na volta em que o jogo fechou.
         let screenshot = self.aviso_de_screenshot();
         let Some(partida) = self.partida.as_mut() else {
