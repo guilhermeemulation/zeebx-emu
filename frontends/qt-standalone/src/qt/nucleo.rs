@@ -759,7 +759,7 @@ impl Nucleo {
             let Some(titulo) = self.titulo() else {
                 return;
             };
-            let pasta = crate::config::config_dir().join("save_states");
+            let pasta = zeebx::config::config_dir().join("save_states");
             let caminho = pasta.join(format!("{}.zstate", screenshot::nome_seguro(&titulo)));
             let Some(partida) = self.partida.as_mut() else {
                 return;
