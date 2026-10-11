@@ -25,6 +25,8 @@ cxx-qt-lib = { version = "0.10", features = ["qt_gui", "qt_qml"] }
 # O `Arc<glow::Context>` que a sessão recebe é o do `glow` que o núcleo usa: a mesma versão, o
 # mesmo tipo.
 glow = "0.16"
+# Compressão dos save states sem dependência nativa adicional.
+flate2 = "1"
 # O seletor de pastas e de arquivos das configurações, o mesmo que o egui usa pelo núcleo: o `rfd`
 # não é reexportado de lá. Mesma versão e mesmas features, então a árvore não cresce.
 rfd = { version = "0.15", default-features = false, features = ["xdg-portal", "async-std"] }
