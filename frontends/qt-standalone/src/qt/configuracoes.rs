@@ -1446,7 +1446,7 @@ impl qobject::Configuracoes {
                 _ => None,
             };
             if let Some(tecla) = tecla {
-                if matches!(tecla, Key::Escape | Key::P | Key::F11) {
+                if matches!(tecla, Key::Escape | Key::P | Key::F5 | Key::F8 | Key::F11) {
                     return Some(catalogo.format("controls.shortcut.reserved", &[("key", tecla.name())]));
                 }
                 if let Some(outro) = ATALHOS
