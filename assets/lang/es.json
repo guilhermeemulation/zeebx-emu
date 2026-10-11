@@ -96,6 +96,7 @@
   "controls.shortcut.reset": "Predeterminado (F9)",
   "controls.shortcut.reset_ff": "Predeterminado (F10)",
   "controls.shortcut.reset_rewind": "Predeterminado (F8)",
+  "controls.shortcut.reset_rewind_qt": "Predeterminado (F6)",
   "controls.shortcut.screenshot": "Captura de pantalla",
   "controls.shortcut.taken": "{key} ya es {button} del puerto {port}. Borra ese botón antes, o elige otra tecla.",
   "controls.shortcut.shared": "{key} también es {button} del puerto {port}. En el juego gana el atajo, y ese botón se queda sin esta entrada.",
