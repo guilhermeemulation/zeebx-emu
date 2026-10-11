@@ -979,7 +979,9 @@ ApplicationWindow {
                         model: [
                             ["controls.shortcut.quit", "Esc"],
                             ["controls.shortcut.pause", "P"],
-                            ["controls.shortcut.fullscreen", "F11 · Alt+Enter"]
+                            ["controls.shortcut.fullscreen", "F11 · Alt+Enter"],
+                            ["controls.shortcut.save_state", "F5"],
+                            ["controls.shortcut.load_state", "F8"]
                         ]
 
                         RowLayout {
