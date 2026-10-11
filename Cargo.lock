@@ -6292,6 +6292,7 @@ dependencies = [
  "cxx-qt-build",
  "cxx-qt-lib",
  "glow",
+ "flate2",
  "qt-build-utils",
  "rfd",
  "winresource",
