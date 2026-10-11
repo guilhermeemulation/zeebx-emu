@@ -343,7 +343,7 @@ impl Atalhos {
     /// acostumou não perde o hábito.
     pub const AVANCAR_PADRAO: &str = "F10";
     /// O Backspace, que seria a escolha óbvia, já é o `AVK_CLR` do jogo.
-    pub const VOLTAR_PADRAO: &str = "F8";
+    pub const VOLTAR_PADRAO: &str = "F6";
 
     pub fn avancar_padrao() -> Vec<Source> {
         vec![Source::key(Self::AVANCAR_PADRAO)]
@@ -659,6 +659,11 @@ impl Settings {
         // campo novo nem sempre é o vazio.
         settings.controls.adopt();
         settings.adota_o_limite_antigo();
+        // F8 virou o atalho fixo de Load State no frontend Qt. Migra o rewind antigo padrão
+        // para F6, evitando que a mesma tecla tente carregar e voltar ao mesmo tempo.
+        if settings.atalhos.voltar == vec![Source::key("F8")] {
+            settings.atalhos.voltar = vec![Source::key(Atalhos::VOLTAR_PADRAO)];
+        }
         settings
     }
 
