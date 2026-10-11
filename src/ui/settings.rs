@@ -664,6 +664,10 @@ impl Settings {
         if settings.atalhos.voltar == vec![Source::key("F8")] {
             settings.atalhos.voltar = vec![Source::key(Atalhos::VOLTAR_PADRAO)];
         }
+        // F5 e F8 agora são atalhos fixos e não podem continuar como tecla de screenshot.
+        if settings.atalhos.screenshot == "F5" || settings.atalhos.screenshot == "F8" {
+            settings.atalhos.screenshot = Atalhos::SCREENSHOT_PADRAO.to_string();
+        }
         settings
     }
 
