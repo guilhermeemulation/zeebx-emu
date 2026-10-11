@@ -99,6 +99,10 @@ Window {
                 janela.close()
             } else if (evento.key === Qt.Key_P && !evento.isAutoRepeat) {
                 pausado.visible = tela.pausa()
+            } else if (evento.key === Qt.Key_F5 && !evento.isAutoRepeat) {
+                tela.salvaEstado()
+            } else if (evento.key === Qt.Key_F8 && !evento.isAutoRepeat) {
+                tela.carregaEstado()
             } else if (evento.key === Qt.Key_F11
                        || (evento.key === Qt.Key_Return && (evento.modifiers & Qt.AltModifier))) {
                 janela.alternaTelaCheia()
@@ -108,7 +112,8 @@ Window {
             evento.accepted = true
         }
         Keys.onReleased: (evento) => {
-            if (!evento.isAutoRepeat && !tela.ehAtalhoDeScreenshot(evento.key)) {
+            if (!evento.isAutoRepeat && !tela.ehAtalhoDeScreenshot(evento.key)
+                    && evento.key !== Qt.Key_F5 && evento.key !== Qt.Key_F8) {
                 tecla(evento.key, false)
             }
             evento.accepted = true
