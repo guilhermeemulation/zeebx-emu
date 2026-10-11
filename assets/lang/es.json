@@ -90,6 +90,8 @@
   "controls.shortcut.quit": "Cerrar el juego",
   "controls.shortcut.pause": "Pausar",
   "controls.shortcut.fullscreen": "Pantalla completa",
+  "controls.shortcut.save_state": "Guardar estado (Save State)",
+  "controls.shortcut.load_state": "Cargar estado (Load State)",
   "controls.shortcut.reserved": "{key} ya es de la ventana del juego: Esc cierra, P pausa, F11 alterna la pantalla completa.",
   "controls.shortcut.reset": "Predeterminado (F9)",
   "controls.shortcut.reset_ff": "Predeterminado (F10)",
