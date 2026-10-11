@@ -91,7 +91,11 @@ Window {
         // jogo: um botão mapeado na mesma tecla não a recebe. Ver
         // `docs/implementacao/22-screenshots.md`.
         Keys.onPressed: (evento) => {
-            if (tela.ehAtalhoDeScreenshot(evento.key)) {
+            if (evento.key === Qt.Key_F5 && !evento.isAutoRepeat) {
+                tela.salvaEstado()
+            } else if (evento.key === Qt.Key_F8 && !evento.isAutoRepeat) {
+                tela.carregaEstado()
+            } else if (tela.ehAtalhoDeScreenshot(evento.key)) {
                 // Segurar a tecla tira um screenshot, e não trinta.
                 if (!evento.isAutoRepeat)
                     tela.screenshot(Qt.formatDateTime(new Date(), "yyyy-MM-dd HH-mm-ss"))
@@ -99,10 +103,6 @@ Window {
                 janela.close()
             } else if (evento.key === Qt.Key_P && !evento.isAutoRepeat) {
                 pausado.visible = tela.pausa()
-            } else if (evento.key === Qt.Key_F5 && !evento.isAutoRepeat) {
-                tela.salvaEstado()
-            } else if (evento.key === Qt.Key_F8 && !evento.isAutoRepeat) {
-                tela.carregaEstado()
             } else if (evento.key === Qt.Key_F11
                        || (evento.key === Qt.Key_Return && (evento.modifiers & Qt.AltModifier))) {
                 janela.alternaTelaCheia()
