@@ -727,10 +727,24 @@ impl CpuBackend for DynarmicCpu {
                 Ok(StopReason::ApiCall { addr })
             }
             Parada::Fetch(addr) => Ok(StopReason::MemoryFault { addr, pc: addr }),
-            Parada::Memoria(addr) => Ok(StopReason::MemoryFault {
-                addr,
-                pc: jit.get_pc(),
-            }),
+            Parada::Memoria(addr) => {
+                // Diagnóstico temporário para falhas de memória no guest ARM.
+                // Capturar os registradores antes de devolver o controle ao despachante
+                // permite distinguir ponteiro inválido de corrupção de estado da CPU.
+                let regs = (0..=15)
+                    .map(|reg| format!("r{reg}={:#010x}", jit.get_reg(reg)))
+                    .collect::<Vec<_>>()
+                    .join(" ");
+                eprintln!(
+                    "[ARM fault] addr={addr:#010x} pc={:#010x} cpsr={:#010x} {regs}",
+                    jit.get_pc(),
+                    jit.get_cpsr(),
+                );
+                Ok(StopReason::MemoryFault {
+                    addr,
+                    pc: jit.get_pc(),
+                })
+            },
             Parada::Excecao(pc) => Ok(StopReason::Exception { pc }),
         }
     }
