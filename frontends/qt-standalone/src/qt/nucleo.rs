@@ -16,6 +16,9 @@ use std::sync::Arc;
 use std::sync::mpsc::{self, Receiver, Sender, TryRecvError};
 use std::time::Instant;
 
+use flate2::read::ZlibDecoder;
+use flate2::write::ZlibEncoder;
+use flate2::Compression;
 use zeebx::eframe::egui::Key;
 use zeebx::input;
 use zeebx::input::padview::PadArt;
@@ -37,6 +40,57 @@ use zeebx::video::rasterizer::QuadroNaPlaca;
 use zeebx::video::display::Framebuffer;
 
 use super::ponte::qobject as gl;
+
+/// Cabeçalho do contêiner comprimido. O núcleo continua recebendo bytes ZBXS descomprimidos.
+const ASSINATURA_ESTADO_COMPRIMIDO: &[u8; 4] = b"ZBSC";
+const CABECALHO_ESTADO_COMPRIMIDO: usize = 12;
+
+/// Comprime um save state usando zlib e registra o tamanho original para validar a leitura.
+fn comprime_estado(bytes: &[u8]) -> Result<Vec<u8>, String> {
+    use std::io::Write;
+    let mut encoder = ZlibEncoder::new(Vec::new(), Compression::best());
+    encoder.write_all(bytes)
+        .map_err(|erro| format!("Não foi possível comprimir o estado: {erro}"))?;
+    let comprimido = encoder.finish()
+        .map_err(|erro| format!("Não foi possível finalizar a compressão do estado: {erro}"))?;
+    let mut saida = Vec::with_capacity(CABECALHO_ESTADO_COMPRIMIDO + comprimido.len());
+    saida.extend_from_slice(ASSINATURA_ESTADO_COMPRIMIDO);
+    saida.extend_from_slice(&(bytes.len() as u64).to_le_bytes());
+    saida.extend_from_slice(&comprimido);
+    Ok(saida)
+}
+
+/// Abre o formato novo com limite de expansão; arquivos antigos ZBXS seguem sendo aceitos.
+fn descomprime_estado_ou_legado(arquivo: &[u8], limite: u64) -> Result<Vec<u8>, String> {
+    if !arquivo.starts_with(ASSINATURA_ESTADO_COMPRIMIDO) {
+        if arquivo.len() as u64 > limite {
+            return Err("O estado antigo excede o limite de 128 MiB".into());
+        }
+        return Ok(arquivo.to_vec());
+    }
+    if arquivo.len() < CABECALHO_ESTADO_COMPRIMIDO {
+        return Err("Cabeçalho do estado comprimido incompleto".into());
+    }
+    let tamanho_original = u64::from_le_bytes(
+        arquivo[4..12].try_into().map_err(|_| "Tamanho original inválido")?
+    );
+    if tamanho_original == 0 || tamanho_original > limite {
+        return Err("O estado descomprimido está vazio ou excede o limite de 128 MiB".into());
+    }
+    use std::io::Read;
+    let decoder = ZlibDecoder::new(&arquivo[CABECALHO_ESTADO_COMPRIMIDO..]);
+    let mut limitado = decoder.take(limite + 1);
+    let mut bytes = Vec::with_capacity(tamanho_original as usize);
+    limitado.read_to_end(&mut bytes)
+        .map_err(|erro| format!("Não foi possível descomprimir o estado: {erro}"))?;
+    if bytes.len() as u64 != tamanho_original {
+        return Err(format!(
+            "Tamanho do estado comprimido inconsistente: esperado {tamanho_original}, obtido {}",
+            bytes.len()
+        ));
+    }
+    Ok(bytes)
+}
 
 /// A imagem de quem não tem nenhuma: a logo do emulador, como no egui.
 const RESERVA: &[u8] = include_bytes!("../../../../assets/zeebx.png");
@@ -659,7 +713,7 @@ impl Nucleo {
         Ok(zeebx::config::config_dir().join("states").join(pasta).join("slot-1.zbxstate"))
     }
 
-    /// Grava o estado atual com publicação atômica: uma falha ao escrever não destrói o anterior.
+    /// Grava o estado atual comprimido com publicação atômica: uma falha ao escrever não destrói o anterior.
     pub fn salva_estado(&mut self) -> Result<String, String> {
         const LIMITE: u64 = 128 * 1024 * 1024;
         let caminho = self.caminho_do_estado()?;
@@ -674,6 +728,7 @@ impl Nucleo {
         if bytes.len() as u64 > LIMITE {
             return Err("O estado excede o limite de 128 MiB".into());
         }
+        let arquivo_estado = comprime_estado(&bytes)?;
         let pasta = caminho.parent().ok_or_else(|| "Pasta do estado inválida".to_string())?;
         std::fs::create_dir_all(pasta).map_err(|erro| format!("Não foi possível criar a pasta de estados: {erro}"))?;
         let temporario = caminho.with_extension("zbxstate.tmp");
@@ -681,7 +736,7 @@ impl Nucleo {
         let mut arquivo = std::fs::File::create(&temporario)
             .map_err(|erro| format!("Não foi possível criar o estado temporário: {erro}"))?;
         use std::io::Write;
-        if let Err(erro) = arquivo.write_all(&bytes).and_then(|_| arquivo.sync_all()) {
+        if let Err(erro) = arquivo.write_all(&arquivo_estado).and_then(|_| arquivo.sync_all()) {
             let _ = std::fs::remove_file(&temporario);
             return Err(format!("Não foi possível gravar o estado: {erro}"));
         }
@@ -700,16 +755,17 @@ impl Nucleo {
         Ok(format!("Estado salvo em {}", caminho.display()))
     }
 
-    /// Carrega o único slot de estado. O núcleo valida versão, integridade e compatibilidade.
+    /// Carrega o único slot de estado. Lê tanto o formato comprimido novo quanto os arquivos antigos.
     pub fn carrega_estado(&mut self) -> Result<String, String> {
         const LIMITE: u64 = 128 * 1024 * 1024;
         let caminho = self.caminho_do_estado()?;
         let tamanho = std::fs::metadata(&caminho)
             .map_err(|erro| format!("Ainda não existe estado salvo para este jogo: {erro}"))?.len();
-        if tamanho == 0 || tamanho > LIMITE {
-            return Err("O arquivo de estado está vazio ou excede o limite de 128 MiB".into());
+        if tamanho == 0 || tamanho > LIMITE + 12 {
+            return Err("O arquivo de estado está vazio ou excede o limite permitido".into());
         }
-        let bytes = std::fs::read(&caminho).map_err(|erro| format!("Não foi possível ler o estado: {erro}"))?;
+        let arquivo = std::fs::read(&caminho).map_err(|erro| format!("Não foi possível ler o estado: {erro}"))?;
+        let bytes = descomprime_estado_ou_legado(&arquivo, LIMITE)?;
         let com_placa = self.gl.is_some();
         let resultado = {
             let partida = self.partida.as_mut().ok_or_else(|| "Nenhum jogo está aberto".to_string())?;
