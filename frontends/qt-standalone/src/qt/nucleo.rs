@@ -761,7 +761,7 @@ impl Nucleo {
         let caminho = self.caminho_do_estado()?;
         let tamanho = std::fs::metadata(&caminho)
             .map_err(|erro| format!("Ainda não existe estado salvo para este jogo: {erro}"))?.len();
-        if tamanho == 0 || tamanho > LIMITE + 12 {
+        if tamanho == 0 || tamanho > LIMITE + 1024 * 1024 {
             return Err("O arquivo de estado está vazio ou excede o limite permitido".into());
         }
         let arquivo = std::fs::read(&caminho).map_err(|erro| format!("Não foi possível ler o estado: {erro}"))?;
