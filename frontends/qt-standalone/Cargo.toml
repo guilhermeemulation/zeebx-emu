@@ -16,6 +16,8 @@ name = "zeebx-qt"
 path = "src/main.rs"
 
 [dependencies]
+# Compressão dos save states em disco; o núcleo recebe o formato ZBXS original.
+flate2 = "1"
 # O núcleo com a feature `desktop`: o áudio, a entrada e a sessão de jogo que o Qt reusa.
 zeebx = { path = "../..", features = ["atualizador"] }
 # A ponte com o Qt: docs/implementacao/21-migracao-para-qt.md.
