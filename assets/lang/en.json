@@ -96,6 +96,7 @@
   "controls.shortcut.reset": "Default (F9)",
   "controls.shortcut.reset_ff": "Default (F10)",
   "controls.shortcut.reset_rewind": "Default (F8)",
+  "controls.shortcut.reset_rewind_qt": "Default (F6)",
   "controls.shortcut.screenshot": "Screenshot",
   "controls.shortcut.taken": "{key} is already {button} on port {port}. Clear that button first, or pick another key.",
   "controls.shortcut.shared": "{key} is also {button} on port {port}. In the game the shortcut wins, and that button loses this input.",
