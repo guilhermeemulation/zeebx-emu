@@ -90,6 +90,8 @@
   "controls.shortcut.quit": "Close the game",
   "controls.shortcut.pause": "Pause",
   "controls.shortcut.fullscreen": "Fullscreen",
+  "controls.shortcut.save_state": "Save State",
+  "controls.shortcut.load_state": "Load State",
   "controls.shortcut.reserved": "{key} already belongs to the game window: Esc closes, P pauses, F11 toggles fullscreen.",
   "controls.shortcut.reset": "Default (F9)",
   "controls.shortcut.reset_ff": "Default (F10)",
