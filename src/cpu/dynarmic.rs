@@ -263,7 +263,7 @@ impl Callbacks for Estado {
         // interrupção BREW: depois de atendê-la a execução continua na instrução seguinte.
         // Reconhecemos as duas operações de saída que os jogos observados usam e devolvemos zero
         // nas outras, como o monitor ARM faz para a maioria das consultas inofensivas.
-        if swi == 0xab {
+        if SEMIHOSTING.contains(&swi) {
             let jit = unsafe { &mut *cb.jit.get() };
             let op = jit.get_reg(0);
             let arg = jit.get_reg(1);
@@ -323,6 +323,9 @@ impl Callbacks for Estado {
         }
     }
 }
+
+/// Os números de `SVC` do semihosting ARM: o do Thumb e o do ARM.
+const SEMIHOSTING: [u32; 2] = [0xab, 0x12_3456];
 
 /// De quantas em quantas entradas no JIT o relógio é lido, quando a medição está ligada.
 const AMOSTRA_DO_JIT: u64 = 64;
