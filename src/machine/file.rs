@@ -273,17 +273,24 @@ impl<C: CpuBackend> Machine<C> {
             // quando tudo correu bem — a documentação chama isso de compatibilidade com o
             // cliente 1.0, e há jogo que confere.
             "EnumNext" => {
-                let next = self
+                let mut proxima = None;
+                while let Some(guest) = self
                     .enumerations
                     .get_mut(&this)
-                    .and_then(std::collections::VecDeque::pop_front);
-                match next.and_then(|guest| {
+                    .and_then(std::collections::VecDeque::pop_front)
+                {
                     let meta = self
                         .vfs
-                        .resolve_dir(&guest)
-                        .and_then(|p| p.metadata().ok())?;
-                    Some((guest, meta))
-                }) {
+                        .resolve(&guest)
+                        .filter(|p| p.exists())
+                        .or_else(|| self.vfs.resolve_dir(&guest))
+                        .and_then(|p| p.metadata().ok());
+                    if let Some(meta) = meta {
+                        proxima = Some((guest, meta));
+                        break;
+                    }
+                }
+                match proxima {
                     Some((guest, meta)) => {
                         self.write_file_info(a1, &guest, &meta)?;
                         TRUE
