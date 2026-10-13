@@ -55,10 +55,17 @@ mod time;
 mod widget;
 mod zip;
 
-/// Teto para leitura de string do guest, contra ponteiro corrompido.
 /// Teto de uma instrução SQL vinda do guest. As maiores do Z-Wheel têm 110 bytes.
 const MAX_SQL: usize = 4096;
-const MAX_STRING: usize = 4096;
+
+/// Teto para leitura de string do guest, contra ponteiro corrompido.
+///
+/// Um MiB, e não quatro KB. O teto protege de um ponteiro sem terminador: a leitura vai em
+/// blocos até o zero, e uma string curta custa o mesmo com qualquer teto. Mas há jogos que
+/// guardam mapas inteiros em uma única string base64; com quatro KB, a leitura cortava o mapa
+/// antes do fim e deixava partes do cenário sem colisão.
+///
+const MAX_STRING: usize = 1 << 20;
 
 /// Teto para as conversões de número (`strtoul`, `atoi`, `strtod`).
 ///
