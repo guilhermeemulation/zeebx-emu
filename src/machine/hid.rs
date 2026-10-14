@@ -233,6 +233,15 @@ impl<C: CpuBackend> Machine<C> {
                     return Ok(Some(EFAILED));
                 };
                 let uid = input::BUTTON_UIDS.get(index).copied().unwrap_or(0);
+                // Diagnóstico do menu ausente: registra apenas eventos consumidos pelo jogo.
+                // record_debug agrupa repetições idênticas e não depende da serial opcional.
+                self.record_debug(format!(
+                    "[QUAKE-HID-PROBE] porta={} evento={} uid=0x{:08x} estado={}",
+                    self.porta_do(this),
+                    index,
+                    uid,
+                    if down { "apertado" } else { "solto" }
+                ));
                 if a1 != 0 {
                     // `AEEHIDButtonInfo`: id, estado, UID, mínimo, máximo.
                     let info = [index as u32, u32::from(down), uid, 0, 1];
