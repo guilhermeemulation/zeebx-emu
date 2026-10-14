@@ -238,7 +238,18 @@ impl<C: CpuBackend> Machine<C> {
                 if index == 9 && down {
                     self.quake_hid_home_seen = true;
                     self.quake_post_home_draws = 0;
-                    self.record_debug("[QUAKE-HOME] evento recebido pelo jogo; iniciando amostra de desenho".to_owned());
+                    // Teste experimental para o Quake: além do evento HID original,
+                    // entrega AVK_CLR ao applet, equivalente ao comando "voltar" do
+                    // teclado BREW. Não altera o estado nem o UID do controle.
+                    // Esta é uma ponte temporária no branch de teste; verificar no jogo
+                    // se o applet usa EVT_KEY para abrir o menu.
+                    let _ = self.send_applet_event(
+                        self.applet_class,
+                        input::EVT_KEY,
+                        input::avk::CLR as u16,
+                        0,
+                    )?;
+                    self.record_debug("[QUAKE-HOME] evento HID recebido; teste AVK_CLR enviado ao applet".to_owned());
                 }
                 // Diagnóstico do menu ausente: registra apenas eventos consumidos pelo jogo.
                 // record_debug agrupa repetições idênticas e não depende da serial opcional.
