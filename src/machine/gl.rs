@@ -8,6 +8,20 @@ use super::*;
 const TETO_DO_ARRAY: u64 = 8 << 20;
 
 impl<C: CpuBackend> Machine<C> {
+    /// Instrumentação temporária para investigar menus 2D ausentes. Só escreve na serial
+    /// opcional e tem limite estrito para não inundar o arquivo nem afetar o jogo.
+    fn registra_gl_menu_probe(&mut self, mensagem: String) {
+        const LIMITE: u32 = 240;
+        if self.serial.is_none() || self.gl_menu_probe_lines >= LIMITE {
+            return;
+        }
+        self.gl_menu_probe_lines += 1;
+        self.registra_serial(format!(
+            "[GL-MENU-PROBE {}/{}] {}",
+            self.gl_menu_probe_lines, LIMITE, mensagem
+        ));
+    }
+
     /// Um ajuste de textura vindo da extensão, com os nomes do OpenGL ES.
     pub(super) fn apply_texture_setting(&mut self, name: &str, pname: u32, value: u32) {
         match name.starts_with("TexEnv") {
@@ -654,6 +668,10 @@ impl<C: CpuBackend> Machine<C> {
         let decoded = atc::decode(&bytes, width as usize, height as usize, explicit_alpha);
 
         let name = self.gl.bound_texture();
+        self.registra_gl_menu_probe(format!(
+            "upload-compressed texture={} level={} format={:#x} size={}x{} bytes={}",
+            name, level, format, width, height, size
+        ));
         self.gl
             .upload_level(name, level, width as usize, height as usize, decoded);
         Ok(())
@@ -675,6 +693,10 @@ impl<C: CpuBackend> Machine<C> {
         // Os parâmetros de repetição e filtro sobrevivem a uma nova imagem: no OpenGL eles são
         // do nome da textura, não do conteúdo, e o jogo costuma defini-los uma vez só.
         let name = self.gl.bound_texture();
+        self.registra_gl_menu_probe(format!(
+            "upload texture={} level={} format={:#x} type={:#x} size={}x{} pixels_ptr={:#x}",
+            name, level, format, kind, width, height, pixels
+        ));
         self.gl
             .upload_level(name, level, width as usize, height as usize, decoded);
         Ok(())
@@ -803,6 +825,10 @@ impl<C: CpuBackend> Machine<C> {
             };
         }
         let [x, y, z, width, height] = values;
+        self.registra_gl_menu_probe(format!(
+            "DrawTex name={} texture={} rect=({:.2},{:.2},{:.4},{:.2},{:.2})",
+            name, self.gl.bound_texture(), x, y, z, width, height
+        ));
         self.gl.draw_texture(x, y, z, width, height);
         Ok(())
     }
@@ -818,6 +844,10 @@ impl<C: CpuBackend> Machine<C> {
         if self.pula_desenho && !self.gl_leitura_de_pixels {
             return Ok(());
         }
+        self.registra_gl_menu_probe(format!(
+            "Draw mode={:#x} indices={} texture={} color={:?}",
+            mode, indices.len(), self.gl.bound_texture(), self.gl.current_color()
+        ));
         let base = self.gl.current_color();
         // Um bloco por array, não um por componente: é a mesma memória do guest, pedida de
         // uma vez. Ver [`Self::read_array`].
