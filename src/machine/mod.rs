@@ -2669,6 +2669,10 @@ pub struct Machine<C: CpuBackend> {
     serial: Option<std::io::BufWriter<std::fs::File>>,
     /// Limita o diagnóstico gráfico por sessão para não inundar a serial.
     gl_menu_probe_lines: u32,
+    /// Marca que o Quake já recebeu o HOME; usado para amostrar desenhos posteriores.
+    quake_hid_home_seen: bool,
+    /// Quantidade limitada de desenhos registrados após o HOME.
+    quake_post_home_draws: u32,
     /// Último erro do EGL, devolvido por `eglGetError`.
     egl_error: u32,
     /// Superfícies do EGL vivas, com as dimensões de cada uma.
@@ -3261,6 +3265,8 @@ impl<C: CpuBackend> Machine<C> {
             ultimo_desenho_us: 0,
             serial: None,
             gl_menu_probe_lines: 0,
+            quake_hid_home_seen: false,
+            quake_post_home_draws: 0,
             egl_error: gles::EGL_SUCCESS,
             egl_surfaces: HashMap::new(),
             egl_viewport_inicial: false,
