@@ -233,6 +233,12 @@ impl<C: CpuBackend> Machine<C> {
             "PopMatrix" => self.gl.pop_matrix(),
             "LoadMatrixx" | "LoadMatrixf" | "MultMatrixx" | "MultMatrixf" => {
                 let m = self.read_matrix(a[0], name.ends_with('x'))?;
+                if self.quake_hid_home_seen && self.quake_post_home_draws < 32 {
+                    self.record_debug(format!(
+                        "[QUAKE-POST-HOME-GL] gl{} matriz={:?}",
+                        name, m
+                    ));
+                }
                 if name.starts_with("Load") {
                     self.gl.load_matrix(m);
                 } else {
@@ -274,7 +280,14 @@ impl<C: CpuBackend> Machine<C> {
             // pede `(0, 68, -179, -67)`. No aparelho o GL recusa e o viewport de antes, o da tela
             // inteira, continua valendo; aceito, ele mandava o mundo inteiro para fora da tela e só
             // o HUD aparecia.
-            "Viewport" if (a[2] as i32) < 0 || (a[3] as i32) < 0 => {}
+            "Viewport" if (a[2] as i32) < 0 || (a[3] as i32) < 0 => {
+                if self.quake_hid_home_seen && self.quake_post_home_draws < 32 {
+                    self.record_debug(format!(
+                        "[QUAKE-POST-HOME-GL] glViewport({}, {}, {}, {}) REJEITADO (dimensão negativa)",
+                        a[0] as i32, a[1] as i32, a[2] as i32, a[3] as i32
+                    ));
+                }
+            }
             "Viewport" => {
                 if self.quake_hid_home_seen && self.quake_post_home_draws < 32 {
                     self.record_debug(format!(
