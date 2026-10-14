@@ -845,14 +845,30 @@ impl<C: CpuBackend> Machine<C> {
         if self.pula_desenho && !self.gl_leitura_de_pixels {
             return Ok(());
         }
-        self.registra_gl_menu_probe(format!(
-            "Draw mode={:#x} indices={} texture={} color={:?}",
-            mode, indices.len(), self.gl.bound_texture(), self.gl.current_color()
-        ));
         let base = self.gl.current_color();
         // Um bloco por array, não um por componente: é a mesma memória do guest, pedida de
         // uma vez. Ver [`Self::read_array`].
         let posicoes = self.read_array(self.gl_vertices, indices, [0.0, 0.0, 0.0, 1.0])?;
+        // Depois do HOME, registra uma amostra curta dos desenhos e sua extensão espacial.
+        // Isso evita que a cena 3D esgote o limite geral antes de observar o que muda após o botão.
+        if self.quake_hid_home_seen && self.quake_post_home_draws < 32 {
+            self.quake_post_home_draws += 1;
+            let mut min_x = f32::INFINITY;
+            let mut min_y = f32::INFINITY;
+            let mut max_x = f32::NEG_INFINITY;
+            let mut max_y = f32::NEG_INFINITY;
+            for p in &posicoes {
+                min_x = min_x.min(p[0]);
+                min_y = min_y.min(p[1]);
+                max_x = max_x.max(p[0]);
+                max_y = max_y.max(p[1]);
+            }
+            self.record_debug(format!(
+                "[QUAKE-POST-HOME-DRAW {}/32] mode={:#x} indices={} texture={} color={:?} bounds=({:.2},{:.2})-({:.2},{:.2})",
+                self.quake_post_home_draws, mode, indices.len(), self.gl.bound_texture(),
+                self.gl.current_color(), min_x, min_y, max_x, max_y
+            ));
+        }
         let cores = self
             .gl_colors
             .em_uso()
