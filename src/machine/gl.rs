@@ -222,7 +222,12 @@ impl<C: CpuBackend> Machine<C> {
             }
 
             // --- Matrizes ---------------------------------------------------------------
-            "MatrixMode" => self.gl.set_matrix_mode(a[0]),
+            "MatrixMode" => {
+                if self.quake_hid_home_seen && self.quake_post_home_draws < 32 {
+                    self.record_debug(format!("[QUAKE-POST-HOME-GL] glMatrixMode({:#x})", a[0]));
+                }
+                self.gl.set_matrix_mode(a[0]);
+            },
             "LoadIdentity" => self.gl.load_identity(),
             "PushMatrix" => self.gl.push_matrix(),
             "PopMatrix" => self.gl.pop_matrix(),
@@ -249,6 +254,12 @@ impl<C: CpuBackend> Machine<C> {
             }
             "Frustumx" | "Frustumf" | "Orthox" | "Orthof" => {
                 let v: Vec<f32> = a[..6].iter().map(|&word| number(word)).collect();
+                if self.quake_hid_home_seen && self.quake_post_home_draws < 32 {
+                    self.record_debug(format!(
+                        "[QUAKE-POST-HOME-GL] gl{}({:.4}, {:.4}, {:.4}, {:.4}, {:.4}, {:.4})",
+                        name, v[0], v[1], v[2], v[3], v[4], v[5]
+                    ));
+                }
                 let m = if name.starts_with("Frustum") {
                     rasterizer::frustum(v[0], v[1], v[2], v[3], v[4], v[5])
                 } else {
@@ -264,9 +275,15 @@ impl<C: CpuBackend> Machine<C> {
             // inteira, continua valendo; aceito, ele mandava o mundo inteiro para fora da tela e só
             // o HUD aparecia.
             "Viewport" if (a[2] as i32) < 0 || (a[3] as i32) < 0 => {}
-            "Viewport" => self
-                .gl
-                .set_viewport(a[0] as i32, a[1] as i32, a[2] as i32, a[3] as i32),
+            "Viewport" => {
+                if self.quake_hid_home_seen && self.quake_post_home_draws < 32 {
+                    self.record_debug(format!(
+                        "[QUAKE-POST-HOME-GL] glViewport({}, {}, {}, {})",
+                        a[0] as i32, a[1] as i32, a[2] as i32, a[3] as i32
+                    ));
+                }
+                self.gl.set_viewport(a[0] as i32, a[1] as i32, a[2] as i32, a[3] as i32)
+            },
             // --- Stencil ------------------------------------------------------------
             //
             // O palco da Z-Wheel arma estes duas vezes por quadro: é o reflexo plano, que marca
@@ -561,9 +578,15 @@ impl<C: CpuBackend> Machine<C> {
             // letra só. Ignorada, a folha inteira ia para a tela por cima do jogo.
             // Mesma regra do `Viewport`: tamanho negativo é recusado sem mudar o estado.
             "Scissor" if (a[2] as i32) < 0 || (a[3] as i32) < 0 => {}
-            "Scissor" => self
-                .gl
-                .set_scissor(a[0] as i32, a[1] as i32, a[2] as i32, a[3] as i32),
+            "Scissor" => {
+                if self.quake_hid_home_seen && self.quake_post_home_draws < 32 {
+                    self.record_debug(format!(
+                        "[QUAKE-POST-HOME-GL] glScissor({}, {}, {}, {})",
+                        a[0] as i32, a[1] as i32, a[2] as i32, a[3] as i32
+                    ));
+                }
+                self.gl.set_scissor(a[0] as i32, a[1] as i32, a[2] as i32, a[3] as i32)
+            },
             // glPixelStorei(pname, param) — por enquanto só o alinhamento de linha na subida de
             // textura. **É a única chamada de GL que o levantamento das 62 ROMs flagrou como
             // "atendida sem fazer nada"**: o Double Dragon, o Galaxy on Fire, o Pac-Mania, o
