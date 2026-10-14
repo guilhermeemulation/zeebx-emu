@@ -2345,6 +2345,21 @@ impl Rasterizador for GpuState {
                 gl.disable(glow::SCISSOR_TEST);
                 self.esquece_a_tesoura();
                 gl.clear(bits);
+
+                // glClear ignora as máscaras no rasterizador de software. No OpenGL precisamos
+                // abri-las para limpar, mas não podemos deixar essa alteração vazar para os
+                // próximos desenhos: uma máscara de profundidade fechada, por exemplo, passaria
+                // a escrever Z e poderia fazer partes do modelo desaparecerem em quadros alternados.
+                if mask & gles::GL_COLOR_BUFFER_BIT != 0 {
+                    let [r, g, b, a] = self.fill.mascara_cor;
+                    gl.color_mask(r, g, b, a);
+                }
+                if mask & gles::GL_DEPTH_BUFFER_BIT != 0 {
+                    gl.depth_mask(self.fill.mascara_profundidade);
+                }
+                if mask & gles::GL_STENCIL_BUFFER_BIT != 0 {
+                    gl.stencil_mask(self.fill.mascara_escrita_stencil);
+                }
             }
         }
         self.devolve_o_contexto();
