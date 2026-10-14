@@ -8,15 +8,16 @@ use super::*;
 const TETO_DO_ARRAY: u64 = 8 << 20;
 
 impl<C: CpuBackend> Machine<C> {
-    /// Instrumentação temporária para investigar menus 2D ausentes. Só escreve na serial
-    /// opcional e tem limite estrito para não inundar o arquivo nem afetar o jogo.
+    /// Instrumentação temporária para investigar menus 2D ausentes.
+    /// Usa o coletor do relatório da sessão, mesmo quando a serial opcional está desligada.
+    /// O limite evita que chamadas de desenho inundem o diagnóstico.
     fn registra_gl_menu_probe(&mut self, mensagem: String) {
         const LIMITE: u32 = 240;
-        if self.serial.is_none() || self.gl_menu_probe_lines >= LIMITE {
+        if self.gl_menu_probe_lines >= LIMITE {
             return;
         }
         self.gl_menu_probe_lines += 1;
-        self.registra_serial(format!(
+        self.record_debug(format!(
             "[GL-MENU-PROBE {}/{}] {}",
             self.gl_menu_probe_lines, LIMITE, mensagem
         ));
