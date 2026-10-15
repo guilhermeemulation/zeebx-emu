@@ -244,7 +244,7 @@ impl TexEnv {
     /// O mesmo numa unidade qualquer: `anterior` é o que saiu da unidade de antes (a cor
     /// primária, na unidade 0), e é sobre ela que os modos clássicos agem.
     pub fn aplica_com(&self, anterior: [f32; 4], primaria: [f32; 4], texel: [f32; 4]) -> [f32; 4] {
-        self.aplica_com_texturas(anterior, primaria, texel, texel, texel, 0, false)
+        self.aplica_com_texturas(anterior, primaria, texel, texel, texel, 0, false, false)
     }
 
     /// Aplica o ambiente com os texels de ambas as unidades já amostrados.
@@ -3797,7 +3797,7 @@ mod tests {
         let texel0 = [0.1, 0.2, 0.3, 0.4];
         let texel1 = [0.7, 0.6, 0.5, 0.8];
         let out = env.aplica_com_texturas(
-            [0.2, 0.2, 0.2, 0.9], [1.0; 4], texel0, texel0, texel1, 0, true,
+            [0.2, 0.2, 0.2, 0.9], [1.0; 4], texel0, texel0, texel1, 0, true, true,
         );
         assert_eq!(&out[..3], &texel1[..3]);
         assert!((out[3] - 0.9).abs() < 1e-6);
