@@ -200,20 +200,37 @@ impl TexEnv {
     /// formas `x` e `f`; as escalas chegam como número.
     pub fn define(&mut self, pname: u32, enumeracao: u32, numero: f32) {
         let faixa = |base: u32| pname.checked_sub(base).filter(|&i| i < 3).map(|i| i as usize);
+        let funcao_valida = |f| matches!(
+            f,
+            gles::GL_REPLACE | gles::GL_MODULATE | gles::GL_ADD | gles::GL_ADD_SIGNED
+                | gles::GL_INTERPOLATE | gles::GL_SUBTRACT | gles::GL_DOT3_RGB | gles::GL_DOT3_RGBA
+        );
+        let fonte_valida = |f| {
+            matches!(f, gles::GL_TEXTURE | gles::GL_CONSTANT | gles::GL_PRIMARY_COLOR | gles::GL_PREVIOUS)
+                || (gles::GL_TEXTURE0..=gles::GL_TEXTURE0 + 31).contains(&f)
+        };
         match pname {
-            gles::GL_COMBINE_RGB => self.combina[0] = enumeracao,
-            gles::GL_COMBINE_ALPHA => self.combina[1] = enumeracao,
-            gles::GL_RGB_SCALE => self.escala[0] = numero,
-            gles::GL_ALPHA_SCALE => self.escala[1] = numero,
+            gles::GL_COMBINE_RGB if funcao_valida(enumeracao) => self.combina[0] = enumeracao,
+            gles::GL_COMBINE_ALPHA if matches!(
+                enumeracao,
+                gles::GL_REPLACE | gles::GL_MODULATE | gles::GL_ADD | gles::GL_ADD_SIGNED
+                    | gles::GL_INTERPOLATE | gles::GL_SUBTRACT
+            ) => self.combina[1] = enumeracao,
+            gles::GL_RGB_SCALE if matches!(numero, 1.0 | 2.0 | 4.0) => self.escala[0] = numero,
+            gles::GL_ALPHA_SCALE if matches!(numero, 1.0 | 2.0 | 4.0) => self.escala[1] = numero,
             _ => {
                 if let Some(i) = faixa(gles::GL_SRC0_RGB) {
-                    self.fontes[0][i] = enumeracao;
+                    if fonte_valida(enumeracao) { self.fontes[0][i] = enumeracao; }
                 } else if let Some(i) = faixa(gles::GL_SRC0_ALPHA) {
-                    self.fontes[1][i] = enumeracao;
+                    if fonte_valida(enumeracao) { self.fontes[1][i] = enumeracao; }
                 } else if let Some(i) = faixa(gles::GL_OPERAND0_RGB) {
-                    self.operandos[0][i] = enumeracao;
+                    if matches!(enumeracao, gles::GL_SRC_COLOR | gles::GL_ONE_MINUS_SRC_COLOR | gles::GL_SRC_ALPHA | gles::GL_ONE_MINUS_SRC_ALPHA) {
+                        self.operandos[0][i] = enumeracao;
+                    }
                 } else if let Some(i) = faixa(gles::GL_OPERAND0_ALPHA) {
-                    self.operandos[1][i] = enumeracao;
+                    if matches!(enumeracao, gles::GL_SRC_ALPHA | gles::GL_ONE_MINUS_SRC_ALPHA | gles::GL_SRC_COLOR | gles::GL_ONE_MINUS_SRC_COLOR) {
+                        self.operandos[1][i] = enumeracao;
+                    }
                 }
             }
         }
@@ -227,37 +244,48 @@ impl TexEnv {
     /// O mesmo numa unidade qualquer: `anterior` é o que saiu da unidade de antes (a cor
     /// primária, na unidade 0), e é sobre ela que os modos clássicos agem.
     pub fn aplica_com(&self, anterior: [f32; 4], primaria: [f32; 4], texel: [f32; 4]) -> [f32; 4] {
+        self.aplica_com_texturas(anterior, primaria, texel, texel, texel, 0, false)
+    }
+
+    /// Aplica o ambiente com os texels de ambas as unidades já amostrados.
+    pub fn aplica_com_texturas(
+        &self, anterior: [f32; 4], primaria: [f32; 4], texel: [f32; 4],
+        texel0: [f32; 4], texel1: [f32; 4], unidade: u32, unidade1_ligada: bool,
+    ) -> [f32; 4] {
         let primaria_ = primaria;
         let primaria = anterior;
         match self.modo {
             gles::GL_REPLACE => texel,
             gles::GL_DECAL => {
                 let mut out = primaria;
-                for c in 0..3 {
-                    out[c] = primaria[c] * (1.0 - texel[3]) + texel[c] * texel[3];
-                }
+                for c in 0..3 { out[c] = primaria[c] * (1.0 - texel[3]) + texel[c] * texel[3]; }
                 out
             }
             gles::GL_ADD => {
                 let mut out = primaria;
-                for c in 0..3 {
-                    out[c] = (primaria[c] + texel[c]).min(1.0);
-                }
+                for c in 0..3 { out[c] = (primaria[c] + texel[c]).min(1.0); }
                 out[3] = primaria[3] * texel[3];
                 out
             }
-            gles::GL_COMBINE => self.combina(anterior, primaria_, texel),
-            // `GL_MODULATE` é o padrão e o que os jogos usam quase sempre.
+            gles::GL_COMBINE => self.combina(anterior, primaria_, texel, texel0, texel1, unidade, unidade1_ligada),
             _ => std::array::from_fn(|c| primaria[c] * texel[c]),
         }
     }
 
-    /// O `GL_COMBINE`. Na unidade 0, `GL_PREVIOUS` é a cor primária.
-    fn combina(&self, anterior: [f32; 4], primaria: [f32; 4], texel: [f32; 4]) -> [f32; 4] {
+    /// Fontes GL_TEXTUREn referenciam a unidade pelo nome, não a etapa atual.
+    fn combina(
+        &self, anterior: [f32; 4], primaria: [f32; 4], texel: [f32; 4],
+        texel0: [f32; 4], texel1: [f32; 4], unidade: u32, unidade1_ligada: bool,
+    ) -> [f32; 4] {
         let fonte = |qual: u32| match qual {
             gles::GL_TEXTURE => texel,
+            gles::GL_TEXTURE0 => texel0,
+            q if q == gles::GL_TEXTURE0 + 1 && unidade1_ligada => texel1,
+            q if q == gles::GL_TEXTURE0 + 1 => anterior,
             gles::GL_CONSTANT => self.cor,
             gles::GL_PRIMARY_COLOR => primaria,
+            gles::GL_PREVIOUS => anterior,
+            q if q == gles::GL_TEXTURE0 + unidade => texel,
             _ => anterior,
         };
         // O operando de uma fonte, para um canal. No alfa só existem os dois de alfa; um jogo que
@@ -3002,7 +3030,11 @@ fn fill_band(tri: &Prepared, uniforms: &Uniforms, band: &mut Band) {
             let montar = || {
                 let mut source = [attribute(0), attribute(1), attribute(2), attribute(3)];
                 let primaria = source;
-                if let Some(texture) = uniforms.texture {
+                // A unidade 1 também pode ser fonte crossbar da unidade 0.
+                let texel1 = uniforms.texture1.map(|texture| {
+                    texture.sample_lod(attribute(7), attribute(8), 0.0)
+                }).unwrap_or([1.0; 4]);
+                let texel0 = if let Some(texture) = uniforms.texture {
                     // A redução pode acontecer em qualquer eixo da tela. Compare os
                     // vizinhos da direita e de baixo, usando o maior footprint.
                     let (u, v) = (attribute(4), attribute(5));
@@ -3043,14 +3075,19 @@ fn fill_band(tri: &Prepared, uniforms: &Uniforms, band: &mut Band) {
                     } else {
                         reducao(tri.step).max(reducao(tri.step_y))
                     };
-                    let texel = texture.sample_lod(u, v, lod);
-                    source = uniforms.texture_env.aplica(source, texel);
+                    texture.sample_lod(u, v, lod)
+                } else {
+                    [1.0; 4]
+                };
+                if uniforms.texture.is_some() {
+                    source = uniforms.texture_env.aplica_com_texturas(
+                        source, primaria, texel0, texel0, texel1, 0, uniforms.texture1.is_some(),
+                    );
                 }
-                // A unidade 1 age sobre o que saiu da 0. Sem mipmap: nos jogos que a usam ela
-                // leva mapa de luz ou a textura de cor de um relevo, e o nível base basta.
-                if let Some(texture) = uniforms.texture1 {
-                    let texel = texture.sample_lod(attribute(7), attribute(8), 0.0);
-                    source = uniforms.env1.aplica_com(source, primaria, texel);
+                if uniforms.texture1.is_some() {
+                    source = uniforms.env1.aplica_com_texturas(
+                        source, primaria, texel1, texel0, texel1, 1, uniforms.texture1.is_some(),
+                    );
                 }
                 // **A névoa entra depois da textura e antes do teste de alfa**, que é a ordem do
                 // OpenGL ES 1.1, e mexe só no RGB: o alfa do fragmento continua sendo o dele.
@@ -3748,6 +3785,27 @@ mod tests {
         for (canal, esperado) in [0.75, 0.5, 0.25, 0.5].into_iter().enumerate() {
             assert!((saida[canal] - esperado).abs() < 1e-6, "{saida:?}");
         }
+    }
+
+    #[test]
+    fn crossbar_amostra_a_unidade_nomeada_e_rejeita_enums_invalidos() {
+        let mut env = TexEnv::com_modo(gles::GL_COMBINE);
+        env.define(gles::GL_COMBINE_RGB, gles::GL_REPLACE, 0.0);
+        env.define(gles::GL_SRC0_RGB, gles::GL_TEXTURE0 + 1, 0.0);
+        env.define(gles::GL_SRC0_ALPHA, gles::GL_PREVIOUS, 0.0);
+        let texel0 = [0.1, 0.2, 0.3, 0.4];
+        let texel1 = [0.7, 0.6, 0.5, 0.8];
+        let out = env.aplica_com_texturas(
+            [0.2, 0.2, 0.2, 0.9], [1.0; 4], texel0, texel0, texel1, 0, true,
+        );
+        assert_eq!(&out[..3], &texel1[..3]);
+        assert!((out[3] - 0.9).abs() < 1e-6);
+        let original = env.fontes[0][0];
+        env.define(gles::GL_SRC0_RGB, 0xdead_beef, 0.0);
+        assert_eq!(env.fontes[0][0], original);
+        let original_func = env.combina[0];
+        env.define(gles::GL_COMBINE_RGB, 0xdead_beef, 0.0);
+        assert_eq!(env.combina[0], original_func);
     }
 
     #[test]
