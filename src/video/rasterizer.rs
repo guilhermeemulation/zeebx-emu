@@ -216,8 +216,8 @@ impl TexEnv {
                 gles::GL_REPLACE | gles::GL_MODULATE | gles::GL_ADD | gles::GL_ADD_SIGNED
                     | gles::GL_INTERPOLATE | gles::GL_SUBTRACT
             ) => self.combina[1] = enumeracao,
-            gles::GL_RGB_SCALE if matches!(numero, 1.0 | 2.0 | 4.0) => self.escala[0] = numero,
-            gles::GL_ALPHA_SCALE if matches!(numero, 1.0 | 2.0 | 4.0) => self.escala[1] = numero,
+            gles::GL_RGB_SCALE if numero == 1.0 || numero == 2.0 || numero == 4.0 => self.escala[0] = numero,
+            gles::GL_ALPHA_SCALE if numero == 1.0 || numero == 2.0 || numero == 4.0 => self.escala[1] = numero,
             _ => {
                 if let Some(i) = faixa(gles::GL_SRC0_RGB) {
                     if fonte_valida(enumeracao) { self.fontes[0][i] = enumeracao; }
@@ -250,7 +250,7 @@ impl TexEnv {
     /// Aplica o ambiente com os texels de ambas as unidades já amostrados.
     pub fn aplica_com_texturas(
         &self, anterior: [f32; 4], primaria: [f32; 4], texel: [f32; 4],
-        texel0: [f32; 4], texel1: [f32; 4], unidade: u32, unidade1_ligada: bool,
+        texel0: [f32; 4], texel1: [f32; 4], unidade: u32, unidade0_ligada: bool, unidade1_ligada: bool,
     ) -> [f32; 4] {
         let primaria_ = primaria;
         let primaria = anterior;
@@ -267,7 +267,7 @@ impl TexEnv {
                 out[3] = primaria[3] * texel[3];
                 out
             }
-            gles::GL_COMBINE => self.combina(anterior, primaria_, texel, texel0, texel1, unidade, unidade1_ligada),
+            gles::GL_COMBINE => self.combina(anterior, primaria_, texel, texel0, texel1, unidade, unidade0_ligada, unidade1_ligada),
             _ => std::array::from_fn(|c| primaria[c] * texel[c]),
         }
     }
@@ -275,11 +275,12 @@ impl TexEnv {
     /// Fontes GL_TEXTUREn referenciam a unidade pelo nome, não a etapa atual.
     fn combina(
         &self, anterior: [f32; 4], primaria: [f32; 4], texel: [f32; 4],
-        texel0: [f32; 4], texel1: [f32; 4], unidade: u32, unidade1_ligada: bool,
+        texel0: [f32; 4], texel1: [f32; 4], unidade: u32, unidade0_ligada: bool, unidade1_ligada: bool,
     ) -> [f32; 4] {
         let fonte = |qual: u32| match qual {
             gles::GL_TEXTURE => texel,
-            gles::GL_TEXTURE0 => texel0,
+            gles::GL_TEXTURE0 if unidade0_ligada => texel0,
+            gles::GL_TEXTURE0 => anterior,
             q if q == gles::GL_TEXTURE0 + 1 && unidade1_ligada => texel1,
             q if q == gles::GL_TEXTURE0 + 1 => anterior,
             gles::GL_CONSTANT => self.cor,
@@ -3081,12 +3082,12 @@ fn fill_band(tri: &Prepared, uniforms: &Uniforms, band: &mut Band) {
                 };
                 if uniforms.texture.is_some() {
                     source = uniforms.texture_env.aplica_com_texturas(
-                        source, primaria, texel0, texel0, texel1, 0, uniforms.texture1.is_some(),
+                        source, primaria, texel0, texel0, texel1, 0, uniforms.texture.is_some(), uniforms.texture1.is_some(),
                     );
                 }
                 if uniforms.texture1.is_some() {
                     source = uniforms.env1.aplica_com_texturas(
-                        source, primaria, texel1, texel0, texel1, 1, uniforms.texture1.is_some(),
+                        source, primaria, texel1, texel0, texel1, 1, uniforms.texture.is_some(), uniforms.texture1.is_some(),
                     );
                 }
                 // **A névoa entra depois da textura e antes do teste de alfa**, que é a ordem do
