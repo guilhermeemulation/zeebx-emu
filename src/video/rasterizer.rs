@@ -3792,6 +3792,7 @@ mod tests {
     fn crossbar_amostra_a_unidade_nomeada_e_rejeita_enums_invalidos() {
         let mut env = TexEnv::com_modo(gles::GL_COMBINE);
         env.define(gles::GL_COMBINE_RGB, gles::GL_REPLACE, 0.0);
+        env.define(gles::GL_COMBINE_ALPHA, gles::GL_REPLACE, 0.0);
         env.define(gles::GL_SRC0_RGB, gles::GL_TEXTURE0 + 1, 0.0);
         env.define(gles::GL_SRC0_ALPHA, gles::GL_PREVIOUS, 0.0);
         let texel0 = [0.1, 0.2, 0.3, 0.4];
