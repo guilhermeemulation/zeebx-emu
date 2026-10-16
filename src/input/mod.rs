@@ -318,7 +318,8 @@ impl Pad {
     /// ignorado, enquanto Start (`0x0106c402`) é traduzido para `AVK_CLR` e abre o menu.
     /// Esta compatibilidade é experimental: mantém Back pressionado e espelha seu estado em Start.
     pub fn com_o_home_nos_dois(mut self) -> Self {
-        self.press(11, self.is_down(9));
+        let home_down = self.is_down(9);
+        self.press(11, home_down);
         self
     }
 
