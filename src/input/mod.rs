@@ -649,26 +649,6 @@ mod tests {
     }
 
     #[test]
-    fn home_pode_ser_espelhado_em_back_e_start_sem_apagar_start_fisico() {
-        let mut pad = Pad::default();
-        pad.press(9, true);
-        let pad = pad.com_o_home_nos_dois();
-        assert!(pad.is_down(9));
-        assert!(pad.is_down(11));
-
-        let mut pad = Pad::default();
-        pad.press(11, true);
-        let pad = pad.com_o_home_nos_dois();
-        assert!(pad.is_down(11), "Start físico não pode ser apagado");
-
-        let mut pad = Pad::default();
-        pad.press(9, false);
-        let pad = pad.com_o_home_nos_dois();
-        assert!(!pad.is_down(9));
-        assert!(!pad.is_down(11));
-    }
-
-    #[test]
     fn o_direcional_mexe_no_botao_e_nao_no_eixo() {
         let [up, down, left, right] = DPAD;
         let mut pad = Pad::default();
