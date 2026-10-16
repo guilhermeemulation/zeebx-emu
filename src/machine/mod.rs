@@ -55,6 +55,50 @@ mod time;
 mod widget;
 mod zip;
 
+/// Nomes de objetos OpenGL ainda reservados. Um driver pode reutilizar nomes apagados;
+/// um contador monotônico acaba corrompendo jogos que indexam tabelas pequenas pelo nome.
+#[derive(Clone, Debug, Default)]
+struct NomesGl(BTreeSet<u32>);
+
+impl NomesGl {
+    /// Reserva e devolve o menor nome positivo que não está em uso.
+    fn novo_nome(&mut self) -> u32 {
+        let mut nome = 1u32;
+        for &usado in &self.0 {
+            if usado == nome {
+                nome = nome.saturating_add(1);
+            } else if usado > nome {
+                break;
+            }
+        }
+        self.0.insert(nome);
+        nome
+    }
+
+    fn ocupa(&mut self, nome: u32) {
+        if nome != 0 { self.0.insert(nome); }
+    }
+
+    fn libera(&mut self, nome: u32) {
+        if nome != 0 { self.0.remove(&nome); }
+    }
+
+    fn nomes(&self) -> impl Iterator<Item = u32> + '_ {
+        self.0.iter().copied()
+    }
+
+    fn com_nomes(nomes: impl IntoIterator<Item = u32>) -> Self {
+        Self(nomes.into_iter().filter(|nome| *nome != 0).collect())
+    }
+
+    /// Estados antigos só guardavam o contador monotônico compartilhado. Reservar esse intervalo
+    /// evita reciclar um nome que o jogo ainda considera vivo ao carregar um estado antigo.
+    fn legado_ate(contador: u32) -> Self {
+        Self((1..=contador).collect())
+    }
+}
+
+
 /// Teto de uma instrução SQL vinda do guest. As maiores do Z-Wheel têm 110 bytes.
 const MAX_SQL: usize = 4096;
 
@@ -2693,6 +2737,9 @@ pub struct Machine<C: CpuBackend> {
     gl_clears: u32,
     /// Último nome de textura ou buffer entregue pelo OpenGL ES.
     gles_next_name: u32,
+    /// Nomes GL vivos, separados porque texturas e buffers têm espaços independentes.
+    nomes_texturas: NomesGl,
+    nomes_buffers: NomesGl,
     /// O objeto `IGLES11`, criado sob demanda pelo `QueryInterface` do EGL.
     gles_object: u32,
     /// Superfície e contexto correntes do EGL.
@@ -3269,6 +3316,8 @@ impl<C: CpuBackend> Machine<C> {
             egl_swaps: 0,
             gl_clears: 0,
             gles_next_name: 0,
+            nomes_texturas: NomesGl::default(),
+            nomes_buffers: NomesGl::default(),
             gles_object: 0,
             egl_surface: 0,
             egl_context: 0,
