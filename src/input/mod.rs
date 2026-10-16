@@ -28,6 +28,9 @@ pub const PORTAS: usize = 2;
 /// `0xe030`, `0xe04a` e outros — que são `AVK_`.
 pub const EVT_KEY: u32 = 0x100;
 
+/// Soltura de tecla no BREW (`EVT_KEY_RELEASE`, AEE.h).
+pub const EVT_KEY_RELEASE: u32 = 0x102;
+
 /// Os códigos virtuais do BREW que o console usa, na numeração do `AEEVCodes.h`.
 ///
 /// A numeração foi conferida no módulo da Z-Wheel, que é quem mais depende dela:
@@ -307,6 +310,16 @@ impl Pad {
         };
         self.set_axis(1, vertical);
         self.set_axis(0, horizontal);
+    }
+
+    /// Duplica o botão HOME/Back como Start para jogos cuja tabela de UIDs só reconhece Start.
+    ///
+    /// O controle físico tem um único botão central. No Quake 1, Back (`0x0106c403`) é
+    /// ignorado, enquanto Start (`0x0106c402`) é traduzido para `AVK_CLR` e abre o menu.
+    /// Esta compatibilidade é experimental: mantém Back pressionado e espelha seu estado em Start.
+    pub fn com_o_home_nos_dois(mut self) -> Self {
+        self.press(11, self.is_down(9));
+        self
     }
 
     /// Os botões que mudaram entre `self` e `next`, com o novo estado de cada um.
@@ -631,6 +644,21 @@ mod tests {
         // "APERTE O BOTÃO HOME", e ninguém adivinharia que ele se chama `back` aqui dentro.
         assert_eq!(Pad::button_by_name("home"), Pad::button_by_name("back"));
         assert!(Pad::button_by_name("home").is_some());
+    }
+
+    #[test]
+    fn home_pode_ser_espelhado_em_back_e_start() {
+        let mut pad = Pad::default();
+        pad.press(9, true);
+        let pad = pad.com_o_home_nos_dois();
+        assert!(pad.is_down(9));
+        assert!(pad.is_down(11));
+
+        let mut pad = Pad::default();
+        pad.press(9, false);
+        let pad = pad.com_o_home_nos_dois();
+        assert!(!pad.is_down(9));
+        assert!(!pad.is_down(11));
     }
 
     #[test]
