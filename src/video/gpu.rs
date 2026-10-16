@@ -1877,6 +1877,8 @@ fn codigo_fonte(fonte: u32) -> i32 {
         gles::GL_TEXTURE => 0,
         gles::GL_CONSTANT => 1,
         gles::GL_PRIMARY_COLOR => 2,
+        gles::GL_TEXTURE0 => 4,
+        q if q == gles::GL_TEXTURE0 + 1 => 5,
         _ => 3,
     }
 }
@@ -2002,11 +2004,15 @@ uniform int func_alfa;
 uniform float ref_alfa;
 out vec4 saida;
 
-// A fonte do `GL_COMBINE`: 0 a textura, 1 a constante, 2 a cor primária, 3 a unidade anterior.
-vec4 fonte_de(int qual, vec4 anterior, vec4 primaria, vec4 texel, vec4 constante) {
+// A fonte do GL_COMBINE: 0 textura atual, 1 constante, 2 primária, 3 anterior,
+ // 4 textura da unidade 0 e 5 textura da unidade 1 (crossbar).
+vec4 fonte_de(int qual, vec4 anterior, vec4 primaria, vec4 texel, vec4 constante,
+              vec4 texel0, vec4 texel1, bool unidade0_ligada, bool unidade1_ligada) {
     if (qual == 0) { return texel; }
     if (qual == 1) { return constante; }
     if (qual == 2) { return primaria; }
+    if (qual == 4 && unidade0_ligada) { return texel0; }
+    if (qual == 5 && unidade1_ligada) { return texel1; }
     return anterior;
 }
 
@@ -2046,13 +2052,14 @@ float funcao_alfa(int f, float a0, float a1, float a2) {
 // Uma unidade de textura, caso a caso igual ao `TexEnv::aplica_com` do software: os modos
 // clássicos agem sobre o que saiu da unidade anterior.
 vec4 unidade(int modo, int crgb, int calfa, int srgb[3], int orgb[3], int salfa[3], int oalfa[3],
-             float ergb, float ealfa, vec4 constante, vec4 anterior, vec4 primaria, vec4 texel) {
+             float ergb, float ealfa, vec4 constante, vec4 anterior, vec4 primaria, vec4 texel,
+             vec4 texel0, vec4 texel1, bool unidade0_ligada, bool unidade1_ligada) {
     if (modo == 4) {
         vec3 r[3];
         float a[3];
         for (int i = 0; i < 3; i++) {
-            r[i] = operando_rgb(orgb[i], fonte_de(srgb[i], anterior, primaria, texel, constante));
-            a[i] = operando_alfa(oalfa[i], fonte_de(salfa[i], anterior, primaria, texel, constante));
+            r[i] = operando_rgb(orgb[i], fonte_de(srgb[i], anterior, primaria, texel, constante, texel0, texel1, unidade0_ligada, unidade1_ligada));
+            a[i] = operando_alfa(oalfa[i], fonte_de(salfa[i], anterior, primaria, texel, constante, texel0, texel1, unidade0_ligada, unidade1_ligada));
         }
         vec3 rgb = clamp(funcao_rgb(crgb, r[0], r[1], r[2]) * ergb, 0.0, 1.0);
         float alfa = clamp(funcao_alfa(calfa, a[0], a[1], a[2]) * ealfa, 0.0, 1.0);
@@ -2072,13 +2079,16 @@ vec4 unidade(int modo, int crgb, int calfa, int srgb[3], int orgb[3], int salfa[
 void main() {
     vec4 primaria = vcor;
     vec4 cor = primaria;
+    // As duas amostras ficam disponíveis antes da combinação, como no caminho de software.
+    vec4 texel0 = texturando == 1 ? texture(amostra, vuv) : vec4(1.0);
+    vec4 texel1 = texturando1 == 1 ? texture(amostra1, vuv1) : vec4(1.0);
     if (texturando == 1) {
         cor = unidade(env, cmb_rgb, cmb_alfa, src_rgb, op_rgb, src_alfa, op_alfa, escala_rgb,
-                      escala_alfa, cor_env, cor, primaria, texture(amostra, vuv));
+                      escala_alfa, cor_env, cor, primaria, texel0, texel0, texel1, texturando == 1, texturando1 == 1);
     }
     if (texturando1 == 1) {
         cor = unidade(env1, cmb_rgb1, cmb_alfa1, src_rgb1, op_rgb1, src_alfa1, op_alfa1,
-                      escala_rgb1, escala_alfa1, cor_env1, cor, primaria, texture(amostra1, vuv1));
+                      escala_rgb1, escala_alfa1, cor_env1, cor, primaria, texel1, texel0, texel1, texturando == 1, texturando1 == 1);
     }
     // A névoa entra depois da textura e antes do teste de alfa, e mexe só no RGB — a mesma
     // ordem do rasterizador de software.
