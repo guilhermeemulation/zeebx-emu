@@ -24,7 +24,7 @@
 //! proíbe, e a porta é essa.
 
 use super::{
-    Callback, CipherState, DecodedImage, FluxoPcm, Machine, MediaState, MemStream, ModeloDeValor,
+    Callback, CipherState, DecodedImage, FluxoPcm, Machine, MediaState, MemStream, ModeloDeValor, NomesGl,
     OpenFile, Outcome, Peek, PendingBlit, PendingSurfaceBlit, RecorteDeImagem, SoundState,
     ThreadState, Timer, DecoderState, GuestCall, HashState, UnzipState, Widget,
 };
@@ -2246,6 +2246,8 @@ impl<C: CpuBackend> Machine<C> {
                 .map(|(nome, bytes)| (vec![*nome], bytes.clone()))
                 .collect::<Vec<_>>(),
         );
+        secoes.poe_u32s("resto.gl_nomes_texturas", self.nomes_texturas.nomes());
+        secoes.poe_u32s("resto.gl_nomes_buffers", self.nomes_buffers.nomes());
         secoes.poe("resto.egl_bytes", self.egl_color_bytes.clone());
         secoes.poe("resto.egl_readback", self.egl_color_readback.clone());
 
@@ -2439,6 +2441,16 @@ impl<C: CpuBackend> Machine<C> {
             .collect();
         let gl_buffers: std::collections::HashMap<u32, Vec<u8>> =
             leitor.blocos("resto.gl_buffers")?.into_iter().map(|(c, b)| (c[0], b)).collect();
+        // Estados novos guardam os nomes realmente vivos. Estados antigos só têm o contador
+        // compartilhado, então reservamos conservadoramente todos os nomes até aquele limite.
+        let nomes_texturas = match leitor.secao("resto.gl_nomes_texturas") {
+            Some(_) => NomesGl::com_nomes(leitor.u32s("resto.gl_nomes_texturas")?),
+            None => NomesGl::legado_ate(self.gles_next_name),
+        };
+        let nomes_buffers = match leitor.secao("resto.gl_nomes_buffers") {
+            Some(_) => NomesGl::com_nomes(leitor.u32s("resto.gl_nomes_buffers")?),
+            None => NomesGl::legado_ate(self.gles_next_name),
+        };
         let egl_color_bytes = secao_exigida(leitor, "resto.egl_bytes")?;
         let egl_color_readback = secao_exigida(leitor, "resto.egl_readback")?;
 
@@ -2549,6 +2561,8 @@ impl<C: CpuBackend> Machine<C> {
         self.avisos_de_midia = avisos_de_midia;
         self.avisos_de_imagem = avisos_de_imagem;
         self.gl_buffers = gl_buffers;
+        self.nomes_texturas = nomes_texturas;
+        self.nomes_buffers = nomes_buffers;
         self.egl_color_bytes = egl_color_bytes;
         self.egl_color_readback = egl_color_readback;
         self.threads = threads;
