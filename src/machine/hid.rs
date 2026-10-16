@@ -233,6 +233,21 @@ impl<C: CpuBackend> Machine<C> {
                     return Ok(Some(EFAILED));
                 };
                 let uid = input::BUTTON_UIDS.get(index).copied().unwrap_or(0);
+                // O índice 9 é o HOME/Back do controle Zeebo neste mapeamento.
+                // Só marca a partir do aperto; não altera nem remapeia a entrada do jogo.
+                if index == 9 {
+                    // TESTE EXPERIMENTAL DO QUAKE: o jogo recebe o botão Back pelo HID,
+                    // mas pode esperar também a tecla CLR do BREW. Restringimos a tentativa
+                    // à classe de applet observada no log do Quake; os demais jogos não mudam.
+                    if self.applet_class == 0x0100_1001 {
+                        self.teclas.push_back((input::avk::CLR, down));
+                    }
+                    if down {
+                        self.quake_hid_home_seen = true;
+                        self.quake_post_home_draws = 0;
+                        self.record_debug("[QUAKE-HOME] teste experimental: HOME também enfileirado como CLR".to_owned());
+                    }
+                }
                 // Diagnóstico do menu ausente: registra apenas eventos consumidos pelo jogo.
                 // record_debug agrupa repetições idênticas e não depende da serial opcional.
                 self.record_debug(format!(
