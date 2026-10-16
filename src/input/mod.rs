@@ -316,10 +316,11 @@ impl Pad {
     ///
     /// O controle físico tem um único botão central. No Quake 1, Back (`0x0106c403`) é
     /// ignorado, enquanto Start (`0x0106c402`) é traduzido para `AVK_CLR` e abre o menu.
-    /// Esta compatibilidade é experimental: mantém Back pressionado e espelha seu estado em Start.
+    /// Esta compatibilidade é experimental: espelha Back em Start sem apagar o Start físico.
     pub fn com_o_home_nos_dois(mut self) -> Self {
         let home_down = self.is_down(9);
-        self.press(11, home_down);
+        let start_down = self.is_down(11);
+        self.press(11, home_down || start_down);
         self
     }
 
@@ -648,12 +649,17 @@ mod tests {
     }
 
     #[test]
-    fn home_pode_ser_espelhado_em_back_e_start() {
+    fn home_pode_ser_espelhado_em_back_e_start_sem_apagar_start_fisico() {
         let mut pad = Pad::default();
         pad.press(9, true);
         let pad = pad.com_o_home_nos_dois();
         assert!(pad.is_down(9));
         assert!(pad.is_down(11));
+
+        let mut pad = Pad::default();
+        pad.press(11, true);
+        let pad = pad.com_o_home_nos_dois();
+        assert!(pad.is_down(11), "Start físico não pode ser apagado");
 
         let mut pad = Pad::default();
         pad.press(9, false);
