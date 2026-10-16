@@ -101,13 +101,19 @@ impl<C: CpuBackend> Machine<C> {
                 let addr = self.intern(text)?;
                 answer = Some((1, addr));
             }
-            // A spec só exige nomes distintos e fora de uso, então uma sequência serve.
+            // Texturas e buffers têm espaços de nomes independentes. Cada chamada devolve o
+            // menor nome livre, como um driver que recicla nomes apagados.
             "GenTextures" | "GenBuffers" => {
                 let (count, out) = (a[0], a[1]);
                 for i in 0..count {
-                    self.gles_next_name += 1;
+                    let nome = if name == "GenTextures" {
+                        self.nomes_texturas.novo_nome()
+                    } else {
+                        self.nomes_buffers.novo_nome()
+                    };
+                    self.gles_next_name = self.gles_next_name.max(nome);
                     if out != 0 {
-                        self.cpu.write_u32(out + i * 4, self.gles_next_name)?;
+                        self.cpu.write_u32(out + i * 4, nome)?;
                     }
                 }
             }
@@ -115,6 +121,7 @@ impl<C: CpuBackend> Machine<C> {
                 for i in 0..a[0] {
                     let name = self.cpu.read_u32(a[1] + i * 4)?;
                     self.gl.delete_texture(name);
+                    self.nomes_texturas.libera(name);
                 }
             }
 
@@ -130,6 +137,7 @@ impl<C: CpuBackend> Machine<C> {
                 // Ligar um nome que o `glGenBuffers` nunca entregou é legal no OpenGL: o nome
                 // passa a existir, vazio, na primeira ligação.
                 if nome != 0 {
+                    self.nomes_buffers.ocupa(nome);
                     self.gl_buffers.entry(nome).or_default();
                 }
                 match alvo {
@@ -174,6 +182,7 @@ impl<C: CpuBackend> Machine<C> {
                 for i in 0..a[0] {
                     let nome = self.cpu.read_u32(a[1] + i * 4)?;
                     self.gl_buffers.remove(&nome);
+                    self.nomes_buffers.libera(nome);
                     // Apagar um buffer desliga a ligação dele, e é o que a especificação pede:
                     // o alvo volta para zero, ou seja, para a memória do jogo.
                     if self.gl_array_buffer == nome {
@@ -379,7 +388,10 @@ impl<C: CpuBackend> Machine<C> {
             "TexEnvx" | "TexEnvi" | "TexEnvf" | "TexEnvxv" | "TexEnviv" | "TexEnvfv" => {}
             "ActiveTexture" => self.gl.set_active_texture(a[0]),
             "ClientActiveTexture" => self.gl.set_client_active_texture(a[0]),
-            "BindTexture" => self.gl.bind_texture(a[1]),
+            "BindTexture" => {
+                self.nomes_texturas.ocupa(a[1]);
+                self.gl.bind_texture(a[1]);
+            },
             "TexImage2D" => self.gles_tex_image(&a)?,
             "TexSubImage2D" => self.gles_tex_sub_image(&a)?,
             "CompressedTexImage2D" => self.gles_compressed_tex_image(&a)?,
