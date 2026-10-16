@@ -405,7 +405,18 @@ impl<C: CpuBackend> Machine<C> {
 
     /// O mesmo, para uma porta escolhida.
     pub fn set_port_pad(&mut self, porta: usize, pad: Pad) {
-        if porta >= input::PORTAS || pad == self.pads[porta] {
+        if porta >= input::PORTAS {
+            return;
+        }
+        // Compatibilidade experimental específica do Quake 1: o controle central HOME é
+        // reportado como Back pelo hardware, mas a tabela de UIDs do jogo só reconhece Start.
+        // Espelhamos o estado apenas neste applet para que ambos os UIDs recebam aperto/soltura.
+        let pad = if self.applet_class == 0x0100_1001 {
+            pad.com_o_home_nos_dois()
+        } else {
+            pad
+        };
+        if pad == self.pads[porta] {
             return;
         }
         let changes = self.pads[porta].changes(&pad);
@@ -645,7 +656,7 @@ impl<C: CpuBackend> Machine<C> {
             }
             let evento = match down {
                 true => input::EVT_KEY,
-                false => input::EVT_KEY + 1,
+                false => input::EVT_KEY_RELEASE,
             };
             let mut tratado = false;
             // Com o painel de HTML em foco, as setas verticais são dele enquanto houver texto
