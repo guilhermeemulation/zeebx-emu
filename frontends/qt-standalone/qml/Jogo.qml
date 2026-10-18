@@ -28,6 +28,16 @@ Window {
     color: "black"
     title: "Zeebx — " + tela.estado
 
+    // Esconde o cursor apenas em tela cheia. Sem botões aceitos, esta área não captura
+    // os cliques do jogo; ao voltar ao modo janela, o cursor normal reaparece.
+    MouseArea {
+        anchors.fill: parent
+        z: 10000
+        acceptedButtons: Qt.NoButton
+        hoverEnabled: true
+        cursorShape: janela.visibility === Window.FullScreen ? Qt.BlankCursor : Qt.ArrowCursor
+    }
+
     // Como na principal: o tamanho em que fechar é o tamanho em que reabrir.
     readonly property real larguraGuardada: tela.larguraDaJanela()
     readonly property real alturaGuardada: tela.alturaDaJanela()
