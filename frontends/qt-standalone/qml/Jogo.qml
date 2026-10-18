@@ -500,6 +500,9 @@ Window {
         anchors.left: parent.left
         anchors.margins: 4
         color: "#bbbbbb"
+        // O estado (jogo + renderizador) é útil na janela normal, mas não deve
+        // ocupar a imagem durante a partida em tela cheia.
+        visible: janela.visibility !== Window.FullScreen
         text: tela.estado
     }
 
